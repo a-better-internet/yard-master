@@ -1,0 +1,2949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Lawn Mower Game & Golf</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        .pointer-auto { pointer-events: auto; }
+        #shop-modal { transition: opacity 0.3s ease; }
+        .upgrade-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .tool-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.2rem; transition: all 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer" class="p-4 sm:p-8 opacity-0 transition-opacity duration-1000">
+    <div class="flex justify-between items-start w-full pointer-events-none gap-2 flex-wrap sm:flex-nowrap">
+        <div class="flex flex-col gap-2">
+            <div class="flex flex-wrap gap-2 pointer-events-auto">
+                <button id="btn-infinity-toggle" onclick="toggleInfinityMode()" class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-4 py-3 rounded-2xl shadow-lg border border-white/20 font-black hover:opacity-90 transition min-w-[100px]">
+                    🌌 Infinity: OFF
+                </button>
+                <button id="btn-golf-toggle" onclick="toggleGolfMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-indigo-400 font-black text-indigo-700 hover:bg-indigo-50 transition min-w-[100px]">
+                    ⛳ Golf
+                </button>
+                <button id="btn-darts-toggle" onclick="toggleDartsMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-orange-400 font-black text-orange-700 hover:bg-orange-50 transition min-w-[100px]">
+                    🎯 Darts
+                </button>
+                <button id="btn-detector-toggle" onclick="toggleDetectorMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-teal-400 font-black text-teal-700 hover:bg-teal-50 transition min-w-[100px]">
+                    🔍 Detect
+                </button>
+                <button id="btn-rccar-toggle" onclick="toggleRcMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-pink-400 font-black text-pink-700 hover:bg-pink-50 transition min-w-[100px]">
+                    🚗 RC Car
+                </button>
+                <button id="btn-bball-toggle" onclick="toggleBasketballMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-amber-400 font-black text-amber-700 hover:bg-amber-50 transition min-w-[100px]">
+                    🏀 Hoops
+                </button>
+                <div class="bg-white/80 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-white/50 min-w-[120px]" id="hud-progress">
+                    <h2 class="text-xs text-gray-500 font-bold uppercase tracking-wider">Progress</h2>
+                    <div class="text-xl sm:text-2xl font-black text-green-600" id="progress-text">0.0%</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mt-1 relative overflow-hidden" id="progress-bar-container">
+                        <div id="progress-bar" class="bg-green-600 h-2 rounded-full transition-all duration-300" style="width:0%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-2 pointer-events-auto mt-1">
+                <div id="icon-laser" class="tool-icon bg-red-500/20 text-red-700 border-2 border-red-500/30 opacity-40">G</div>
+                <div id="icon-water" class="tool-icon bg-blue-500/20 text-blue-700 border-2 border-blue-500/30 opacity-40">H</div>
+                <div id="icon-torch" class="tool-icon bg-orange-500/20 text-orange-700 border-2 border-orange-500/30 opacity-40 flex-col">
+                    <span class="leading-none mt-1">T</span>
+                    <span id="torch-count" class="text-[11px] leading-none font-black mt-0.5">0</span>
+                </div>
+                <div id="icon-orb" class="tool-icon bg-purple-500/20 text-purple-700 border-2 border-purple-500/30 opacity-40">O</div>
+            </div>
+        </div>
+        <div class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-yellow-400 pointer-events-auto text-center cursor-pointer hover:bg-white transition flex-1 max-w-[200px]" onclick="toggleShop()" id="hud-coins">
+            <h2 class="text-xs text-gray-500 font-bold uppercase tracking-wider">Coins</h2>
+            <div class="text-2xl font-black text-yellow-500 transition-transform duration-150" id="coin-text">🪙 0</div>
+            <div class="text-[10px] text-green-600 font-bold mt-1 bg-green-100 rounded-full px-2 py-0.5 inline-block">UPGRADES (E)</div>
+        </div>
+        <div class="bg-white/80 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-white/50 pointer-events-auto text-right min-w-[100px] sm:min-w-[120px]" id="hud-weeds">
+            <h2 class="text-xs text-gray-500 font-bold uppercase tracking-wider">Weeds</h2>
+            <div class="text-xl sm:text-2xl font-black text-yellow-500" id="weed-text">0/50</div>
+        </div>
+    </div>
+
+    <div id="notification-msg" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-green-500 text-white font-black text-4xl sm:text-6xl px-10 py-6 rounded-3xl shadow-2xl border-4 border-white opacity-0 transition-all duration-500 pointer-events-none scale-75 z-50 text-center uppercase tracking-widest drop-shadow-lg flex flex-col items-center">
+        <span id="notif-title">Job Complete!</span>
+        <div id="notif-sub" class="text-lg sm:text-2xl mt-2 font-bold text-green-100">Generating new yard...</div>
+    </div>
+
+    <div id="golf-ui" class="absolute bottom-16 left-1/2 transform -translate-x-1/2 hidden flex-col items-center pointer-events-none w-64 z-30">
+        <div class="text-white font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-1 text-sm" id="golf-strokes">Strokes: 0</div>
+        <div class="text-white font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2 text-xl" id="golf-status">HOLD SPACE TO AIM</div>
+        <div class="w-full bg-black/60 rounded-full h-6 border-2 border-white overflow-hidden shadow-lg p-1">
+            <div id="golf-power-bar" class="bg-gradient-to-r from-green-400 via-yellow-400 to-red-500 h-full w-0 rounded-full"></div>
+        </div>
+    </div>
+
+    <div id="darts-ui" class="absolute bottom-16 left-1/2 transform -translate-x-1/2 hidden flex-col items-center pointer-events-none w-64 z-30">
+        <div class="text-white font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-1 text-sm" id="darts-score">Score: 0</div>
+        <div class="text-white font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2 text-xl" id="darts-status">HOLD SPACE TO AIM</div>
+        <div class="w-full bg-black/60 rounded-full h-6 border-2 border-white overflow-hidden shadow-lg p-1">
+            <div id="darts-power-bar" class="bg-gradient-to-r from-blue-400 via-purple-400 to-red-500 h-full w-0 rounded-full"></div>
+        </div>
+    </div>
+
+    <div id="detector-ui" class="absolute bottom-16 left-1/2 transform -translate-x-1/2 hidden flex-col items-center pointer-events-none w-64 z-30">
+        <div class="text-white font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2 text-xl" id="detector-status">SEARCHING...</div>
+        <div class="w-full bg-black/60 rounded-full h-6 border-2 border-white overflow-hidden shadow-lg p-1">
+            <div id="detector-signal-bar" class="bg-gradient-to-r from-teal-400 via-yellow-400 to-red-500 h-full w-0 rounded-full transition-all duration-100"></div>
+        </div>
+    </div>
+
+    <div id="bball-ui" class="absolute bottom-16 left-1/2 transform -translate-x-1/2 hidden flex-col items-center pointer-events-none w-64 z-30">
+        <div class="text-white font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-1 text-sm" id="bball-score">Score: 0</div>
+        <div class="text-white font-black drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2 text-xl" id="bball-status">HOLD SPACE TO SHOOT</div>
+        <div class="w-full bg-black/60 rounded-full h-6 border-2 border-white overflow-hidden shadow-lg p-1">
+            <div id="bball-power-bar" class="bg-gradient-to-r from-yellow-400 via-orange-400 to-red-500 h-full w-0 rounded-full"></div>
+        </div>
+    </div>
+
+    <div id="laser-ui" class="absolute bottom-16 right-4 flex flex-col items-center pointer-events-none hidden z-30">
+        <div class="bg-black/70 px-3 py-1 rounded-full border border-green-500 w-full max-w-[80px]">
+            <div id="laser-bar" class="bg-green-500 h-2 w-full rounded-full transition-all"></div>
+        </div>
+    </div>
+</div>
+
+<div id="shop-modal" class="hidden absolute top-0 left-0 w-full h-full bg-black/70 z-40 flex flex-col items-center justify-center backdrop-blur-sm pointer-events-auto">
+    <div class="bg-white p-6 sm:p-8 rounded-3xl shadow-2xl max-w-lg w-[95%]">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-3xl font-black text-gray-800">Mower Shop</h2>
+            <div class="text-2xl font-black text-yellow-500 bg-yellow-100 px-4 py-1 rounded-full" id="shop-coins">🪙 0</div>
+        </div>
+        <div class="space-y-4">
+            <div class="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <div>
+                    <h3 class="font-bold text-lg text-gray-800">Wide Deck</h3>
+                    <p class="text-sm text-gray-500">Increases cutting radius</p>
+                    <div class="text-xs font-bold text-green-600 mt-1" id="deck-lvl">Level 1/5</div>
+                </div>
+                <button id="btn-upg-deck" onclick="buyUpgrade('deck')" class="upgrade-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition">🪙 45</button>
+            </div>
+            <div class="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <div>
+                    <h3 class="font-bold text-lg text-gray-800">V8 Engine</h3>
+                    <p class="text-sm text-gray-500">Faster top speed</p>
+                    <div class="text-xs font-bold text-green-600 mt-1" id="engine-lvl">Level 1/5</div>
+                </div>
+                <button id="btn-upg-engine" onclick="buyUpgrade('engine')" class="upgrade-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition">🪙 60</button>
+            </div>
+            <div class="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <div>
+                    <h3 class="font-bold text-lg text-gray-800">Racing Slicks</h3>
+                    <p class="text-sm text-gray-500">Tighter turns</p>
+                    <div class="text-xs font-bold text-green-600 mt-1" id="tires-lvl">Level 1/5</div>
+                </div>
+                <button id="btn-upg-tires" onclick="buyUpgrade('tires')" class="upgrade-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition">🪙 30</button>
+            </div>
+            <div class="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <div>
+                    <h3 class="font-bold text-lg text-gray-800">LED Headlights</h3>
+                    <p class="text-sm text-gray-500">Wider light beam</p>
+                    <div class="text-xs font-bold text-green-600 mt-1" id="lights-lvl">Level 1/5</div>
+                </div>
+                <button id="btn-upg-lights" onclick="buyUpgrade('lights')" class="upgrade-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition">🪙 35</button>
+            </div>
+            <div class="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <div>
+                    <h3 class="font-bold text-lg text-gray-800">Hover Thrusters</h3>
+                    <p class="text-sm text-gray-500">Press SPACE to float (5s)</p>
+                    <div class="text-xs font-bold text-green-600 mt-1" id="hover-lvl">Level 0/1</div>
+                </div>
+                <button id="btn-upg-hover" onclick="buyUpgrade('hover')" class="upgrade-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition">🪙 500</button>
+            </div>
+        </div>
+        <button onclick="toggleShop()" class="mt-8 w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-xl transition">Close Shop (E)</button>
+    </div>
+</div>
+
+<script>
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+const YARD_SIZE        = 40;
+const GRASS_STEP       = 0.5;
+const GRASS_GRID_SIZE  = Math.floor(YARD_SIZE / GRASS_STEP);
+const YARD_GRASS_COUNT = GRASS_GRID_SIZE * GRASS_GRID_SIZE;
+
+const INF_GRID_RADIUS  = 60;
+const INF_GRASS_COUNT  = (INF_GRID_RADIUS * 2) * (INF_GRID_RADIUS * 2);
+
+const TOTAL_WEEDS      = 150;
+const MAX_PARTICLES    = 800;
+const NUM_BUGS         = 35;
+const NUM_POLLEN       = 200;
+const NUM_ROCKS        = 8;
+const NUM_STUMPS       = 5;
+
+const GOLF_HOLE_RADIUS   = 0.4;
+const LASER_DURATION_SEC = 30;
+const GOLF_POWER_SCALE   = 0.25;
+const GOLF_POWER_LIFT    = 0.3;
+
+const TORCH_SPAWN_TIME   = 90;  
+const LASER_SPAWN_TIME   = 120; 
+const WATER_SPAWN_TIME   = 150; 
+const ORB_SPAWN_TIME     = 240; 
+
+const _bugUpAxis = new THREE.Vector3(0, 1, 0);
+
+function cellKey(wx, wz) { return wx * 1000003 + wz; }
+
+const _tempColor   = new THREE.Color();
+const _ballRotAxis = new THREE.Vector3();
+
+const elevationCache = new Map();
+const MAX_ELEV_CACHE = 50000;
+
+// =============================================================================
+// GAME STATE
+// =============================================================================
+let isInfinityMode  = false;
+let lastMowerCellX  = -999999;
+let lastMowerCellZ  = -999999;
+const worldMowedMap   = new Map();
+const worldWeedMap    = new Map();
+const worldWateredMap = new Map();
+let yardEnvironmentGroup;
+let yardGroundMesh, infGroundMesh, outerMesh;
+let infRockMesh, infStumpMesh;
+const MAX_INF_ROCKS  = 150;
+const MAX_INF_STUMPS = 150;
+
+let mowedCount    = 0;
+let weedsMowed    = 0;
+let isGameRunning = false;
+let isShopOpen    = false;
+let isResetting   = false;
+
+let coins          = 0;
+let mowerCutRadius = 0.8;
+
+let hoverTimer = 0;
+let hoverCooldown = 0;
+let currentHoverOffset = 0;
+
+const upgrades = {
+    deck:   { level: 1, max: 5, baseCost: 45,  costMult: 1.5 },
+    engine: { level: 1, max: 5, baseCost: 60,  costMult: 1.5 },
+    tires:  { level: 1, max: 5, baseCost: 30,  costMult: 1.4 },
+    lights: { level: 1, max: 5, baseCost: 35,  costMult: 1.5 }, 
+    hover:  { level: 0, max: 1, baseCost: 500, costMult: 1 }
+};
+
+// =============================================================================
+// THREE.JS CORE
+// =============================================================================
+let scene, camera, renderer, ambientLight, dirLight;
+let mowerGroup, mowerBodyMesh;
+let headlights = [];
+let golfLightRef = null;
+
+let yardGrassMesh, infGrassMesh;
+let grassMesh;
+let weedMesh;
+
+let yardGrassStates  = new Uint8Array(YARD_GRASS_COUNT);
+let yardGrassWatered = new Float32Array(YARD_GRASS_COUNT);
+let yardWeedStates   = new Uint16Array(YARD_GRASS_COUNT);
+
+let particleMesh, particlesData = [];
+let bugMesh, bugsData = [];
+let activeParticleCount = 0;
+
+let cloudGroup, sunMesh, moonMesh, pollenMesh, pollenData = [];
+let balls = [];
+let obstacles = [];
+
+let bombGroup, bombActive = false, bombSpawned = false;
+let laserPowerupGroup, waterGunPowerupGroup, orbPowerupGroup, torchPowerupGroup;
+let laserTimer = 0, waterGunTimer = 0, orbTimer = 0, torchTimer = 0;
+let laserPowerupActive = false, mowerHasLaser = false;
+let laserTimeLeft = 0, laserCooldown = 0;
+let hasWaterGun = false, hasOrb = false;
+
+let torchesInventory = 0;
+const MAX_TORCHES = 5;
+const MAX_PLACED_TORCHES = 20;
+const placedTorches = [];
+
+const MAX_LASERS = 10;
+let lasersData = [];
+let laserMesh;
+
+// =============================================================================
+// AUDIO
+// =============================================================================
+let audioCtx, engineOsc, engineFilter, engineGain;
+
+// =============================================================================
+// INPUT & CAMERA STATE
+// =============================================================================
+const keys = { forward: false, backward: false, left: false, right: false, water: false };
+const mowerState = {
+    speed: 0, maxSpeed: 8, acceleration: 15, deceleration: 10,
+    rotationSpeed: 3, heading: 0, prevX: 0, prevZ: 0
+};
+let camDistance   = 12;
+let camYaw        = 0;
+let camPitch      = 0.5;
+let isDraggingCam = false;
+let prevMousePos  = { x: 0, y: 0 };
+
+// =============================================================================
+// DAY / NIGHT
+// =============================================================================
+const DAY_CYCLE_DURATION = 1500;
+let dayNightTime = DAY_CYCLE_DURATION * 0.5;
+let isNightTime  = false;
+let currentHlIntensity = 0;
+
+const colorDaySky      = new THREE.Color(0x87CEEB);
+const colorSunsetSky   = new THREE.Color(0xFF7F50);
+const colorNightSky    = new THREE.Color(0x0B0B1A);
+const colorSunLight    = new THREE.Color(0xffffff);
+const colorSunsetLight = new THREE.Color(0xffa500);
+const colorMoonLight   = new THREE.Color(0x445588);
+
+// =============================================================================
+// GOLF STATE
+// =============================================================================
+let isGolfMode = false;
+let golfGroup, golfBallMesh, golfHoleGroup, golfClubPivot, golfClubGroup, aimMesh, golfLight;
+let golfState = {
+    pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+    active: false, charging: false, power: 0, chargeDir: 1,
+    radius: 0.15, strokes: 0, aimYaw: 0
+};
+
+// =============================================================================
+// DARTS STATE
+// =============================================================================
+let isDartsMode = false;
+let dartsGroup, dartMesh, dartTargetGroup, aimMeshDarts, dartLight, dartLightRef;
+let dartsState = {
+    pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+    active: false, charging: false, power: 0, chargeDir: 1,
+    score: 0, aimYaw: 0, state: 'idle'
+};
+
+// =============================================================================
+// DETECTOR STATE
+// =============================================================================
+let isDetectorMode = false;
+let detectorGroup, detectorMesh, detectorLight;
+let detectorState = { pos: new THREE.Vector3(), heading: 0, speed: 0 };
+let buriedTreasures = [];
+const worldTreasureMap = new Map();
+let currentClosestTreasure = null;
+let currentClosestDist = Infinity;
+let detectorBeepTimer = 0;
+
+// =============================================================================
+// BASKETBALL STATE
+// =============================================================================
+let isBasketballMode = false;
+let hoopGroup, basketballGroup, basketballMesh, aimMeshBball;
+let bballState = {
+    pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+    active: false, charging: false, power: 0, chargeDir: 1,
+    score: 0, aimYaw: 0, state: 'idle', prevY: 0
+};
+
+// =============================================================================
+// RC CAR STATE
+// =============================================================================
+let isRcMode = false;
+let rcGroup, rcMesh, rcRingGroup, rcJumpsGroup;
+let rcJumps = [];
+let rcState = { 
+    pos: new THREE.Vector3(), 
+    vel: new THREE.Vector3(), 
+    heading: 0, 
+    speed: 0, 
+    isAirborne: false 
+};
+
+// =============================================================================
+// TERRAIN & SAFE MATH
+// =============================================================================
+let terrainSeedOffsetX = Math.random() * 100;
+let terrainSeedOffsetZ = Math.random() * 100;
+
+function getElevation(x, z) {
+    if (isNaN(x) || isNaN(z)) return 0;
+    const qx = Math.round(x * 4), qz = Math.round(z * 4);
+    const k  = qx * 1000003 + qz;
+    const c  = elevationCache.get(k);
+    if (c !== undefined) return c;
+    const px  = x + terrainSeedOffsetX, pz = z + terrainSeedOffsetZ;
+    const val = Math.sin(px * 0.2) * Math.cos(pz * 0.2) * 0.6 + Math.sin(px * 0.05) * 0.8;
+    if (elevationCache.size > MAX_ELEV_CACHE) elevationCache.clear();
+    elevationCache.set(k, val);
+    return val;
+}
+
+function getGrassHeight(x, z) {
+    let uncut = false;
+    if (isInfinityMode) {
+        const cx = Math.floor(x / GRASS_STEP), cz = Math.floor(z / GRASS_STEP);
+        const k = cellKey(cx, cz);
+        if (!worldMowedMap.get(k)) uncut = true;
+    } else {
+        const halfYard = YARD_SIZE / 2;
+        const col = Math.floor((x + halfYard) / GRASS_STEP);
+        const row = Math.floor((z + halfYard) / GRASS_STEP);
+        if (col >= 0 && col < GRASS_GRID_SIZE && row >= 0 && row < GRASS_GRID_SIZE) {
+            const idx = row * GRASS_GRID_SIZE + col;
+            if (yardGrassStates[idx] === 0) uncut = true;
+        }
+    }
+    return uncut ? 0.4 : 0; 
+}
+
+function getRcElevationWithJumps(x, z) {
+    let base = getElevation(x, z) + getGrassHeight(x, z);
+    if (!isRcMode || !rcJumpsGroup || !rcJumpsGroup.visible) return base;
+    for (let j of rcJumps) {
+        const dx = x - j.x;
+        const dz = z - j.z;
+        const lx = dx * Math.cos(-j.yaw) - dz * Math.sin(-j.yaw);
+        const lz = dx * Math.sin(-j.yaw) + dz * Math.cos(-j.yaw);
+        if (lx > -1.5 && lx < 1.5 && lz > 0 && lz < 3) {
+            const rHeight = j.baseY + (lz / 3) * 1.5;
+            if (rHeight > base) base = rHeight;
+        }
+    }
+    return base;
+}
+
+function deterministicHash(x, z) {
+    let n = Math.sin(x * 12.9898 + z * 78.233 + 43.21) * 43758.5453;
+    return n - Math.floor(n);
+}
+
+let lastTime = 0;
+
+// =============================================================================
+// SAVE / LOAD
+// =============================================================================
+function saveProgress() {
+    const doSave = () => {
+        try {
+            localStorage.setItem('ym3d_coins', coins);
+            const levels = {};
+            Object.keys(upgrades).forEach(k => { levels[k] = upgrades[k].level; });
+            localStorage.setItem('ym3d_upgrades', JSON.stringify(levels));
+        } catch (e) {}
+    };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(doSave);
+    else setTimeout(doSave, 0);
+}
+
+function loadProgress() {
+    try {
+        const savedCoins    = localStorage.getItem('ym3d_coins');
+        const savedUpgrades = localStorage.getItem('ym3d_upgrades');
+        if (savedCoins)    coins = parseInt(savedCoins, 10) || 0;
+        if (savedUpgrades) {
+            const levels = JSON.parse(savedUpgrades);
+            Object.keys(upgrades).forEach(k => {
+                if (levels[k] !== undefined) upgrades[k].level = Math.min(levels[k], upgrades[k].max);
+            });
+        }
+    } catch (e) {}
+}
+
+function applyUpgradeEffects() {
+    mowerCutRadius           = 0.8 + (upgrades.deck.level   - 1) * 0.15;
+    mowerState.maxSpeed      = 8   + (upgrades.engine.level - 1) * 2;
+    mowerState.acceleration  = 15  + (upgrades.engine.level - 1) * 3;
+    mowerState.rotationSpeed = 3   + (upgrades.tires.level  - 1) * 0.6;
+    mowerState.deceleration  = 10  + (upgrades.tires.level  - 1) * 3;
+    if (mowerBodyMesh) mowerBodyMesh.scale.x = 1 + (upgrades.deck.level - 1) * 0.15;
+    
+    const baseAngle = Math.PI / 5;
+    const newAngle = baseAngle + (upgrades.lights.level - 1) * 0.15;
+    headlights.forEach(hl => { hl.angle = newAngle; });
+}
+
+function checkYardComplete() {
+    if (isInfinityMode || isResetting) return;
+    if (mowedCount >= YARD_GRASS_COUNT * 0.999) {
+        isResetting = true;
+        showNotification('Job Complete!', 'Generating new yard...', 2500);
+        saveProgress();
+        setTimeout(() => {
+            populateYard(true);
+            mowerGroup.position.set(0, getElevation(0, 0), 0);
+            mowerState.speed = 0; mowerState.heading = 0;
+            mowerState.prevX = 0; mowerState.prevZ  = 0;
+            isResetting = false;
+        }, 2500);
+    }
+}
+
+// =============================================================================
+// INIT
+// =============================================================================
+function init() {
+    loadProgress();
+    const container = document.getElementById('canvas-container');
+
+    scene = new THREE.Scene();
+    scene.background = colorDaySky;
+    scene.fog = new THREE.Fog(colorDaySky, 40, 180);
+
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 250);
+    camera.position.set(0, 10, 15);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width  = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.left   = -25; dirLight.shadow.camera.right  = 25;
+    dirLight.shadow.camera.top    =  25; dirLight.shadow.camera.bottom = -25;
+    dirLight.shadow.camera.far    = 150;
+    scene.add(dirLight);
+
+    buildStaticEnvironment();
+    buildItemsAndPowerups();
+    buildMower();
+    applyUpgradeEffects();
+    buildGolf();
+    buildDarts();
+    buildDetector();
+    buildRcCar();
+    buildBasketball();
+    setupInput();
+
+    document.getElementById('coin-text').innerText = `🪙 ${coins}`;
+
+    window.addEventListener('resize', onWindowResize);
+    
+    // Jump Straight Into The Game
+    setTimeout(() => {
+        document.getElementById('ui-layer').style.opacity = '1';
+        isGameRunning  = true;
+        lastTime       = performance.now();
+        isInfinityMode = false;
+        grassMesh = yardGrassMesh;
+        infGrassMesh.visible  = false;
+        yardGrassMesh.visible = true;
+        yardEnvironmentGroup.visible = true;
+        infGroundMesh.visible        = false;
+        document.getElementById('progress-bar-container').style.display = 'block';
+        document.getElementById('hud-weeds').style.display = 'block';
+        populateYard(false); 
+    }, 100);
+
+    requestAnimationFrame(gameLoop);
+}
+
+// =============================================================================
+// AUDIO
+// =============================================================================
+function initAudio() {
+    if (audioCtx) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    audioCtx = new AudioContext();
+    engineOsc  = audioCtx.createOscillator();   engineOsc.type = 'sawtooth'; engineOsc.frequency.value = 30;
+    engineFilter = audioCtx.createBiquadFilter(); engineFilter.type = 'lowpass'; engineFilter.frequency.value = 100;
+    engineGain = audioCtx.createGain();           engineGain.gain.value = 0;
+    engineOsc.connect(engineFilter); engineFilter.connect(engineGain); engineGain.connect(audioCtx.destination);
+    engineOsc.start();
+}
+
+function updateAudio() {
+    if (!audioCtx) return;
+    if (isGameRunning && !isShopOpen && !isGolfMode && !isDartsMode && !isDetectorMode && !isRcMode && !isBasketballMode) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const r = Math.abs(mowerState.speed) / mowerState.maxSpeed;
+        engineOsc.frequency.setTargetAtTime(30 + r * 40, audioCtx.currentTime, 0.1);
+        engineFilter.frequency.setTargetAtTime(150 + r * 600, audioCtx.currentTime, 0.1);
+        engineGain.gain.setTargetAtTime(0.3 + r * 0.3, audioCtx.currentTime, 0.1);
+    } else if (isRcMode && !isShopOpen) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const r = Math.abs(rcState.speed) / 15.0; 
+        engineOsc.frequency.setTargetAtTime(100 + r * 200, audioCtx.currentTime, 0.1); 
+        engineFilter.frequency.setTargetAtTime(300 + r * 800, audioCtx.currentTime, 0.1);
+        engineGain.gain.setTargetAtTime(0.1 + r * 0.2, audioCtx.currentTime, 0.1);
+    } else {
+        engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+    }
+}
+
+// =============================================================================
+// ENVIRONMENT BUILDING
+// =============================================================================
+function buildStaticEnvironment() {
+    yardEnvironmentGroup = new THREE.Group();
+    scene.add(yardEnvironmentGroup);
+
+    const infGroundGeo = new THREE.PlaneGeometry(400, 400, 128, 128);
+    infGroundGeo.rotateX(-Math.PI / 2);
+    const infPos = infGroundGeo.attributes.position;
+    for (let i = 0; i < infPos.count; i++) infPos.setY(i, getElevation(infPos.getX(i), infPos.getZ(i)) - 0.1);
+    infGroundGeo.computeVertexNormals();
+    infGroundMesh = new THREE.Mesh(infGroundGeo, new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 1 }));
+    infGroundMesh.receiveShadow = true; infGroundMesh.visible = false; infGroundMesh.frustumCulled = false;
+    scene.add(infGroundMesh);
+
+    const yardGroundGeo = new THREE.PlaneGeometry(YARD_SIZE + 10, YARD_SIZE + 10, 64, 64);
+    yardGroundGeo.rotateX(-Math.PI / 2);
+    const yardPos = yardGroundGeo.attributes.position;
+    for (let i = 0; i < yardPos.count; i++) yardPos.setY(i, getElevation(yardPos.getX(i), yardPos.getZ(i)) - 0.1);
+    yardGroundGeo.computeVertexNormals();
+    yardGroundMesh = new THREE.Mesh(yardGroundGeo, new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 1 }));
+    yardGroundMesh.receiveShadow = true; yardGroundMesh.frustumCulled = false;
+    yardEnvironmentGroup.add(yardGroundMesh);
+
+    const outerGeo = new THREE.PlaneGeometry(600, 600, 64, 64);
+    outerGeo.rotateX(-Math.PI / 2);
+    const outerPos = outerGeo.attributes.position;
+    const outerColors = [];
+    for (let i = 0; i < outerPos.count; i++) {
+        const px = outerPos.getX(i), pz = outerPos.getZ(i);
+        outerPos.setY(i, getElevation(px, pz) - 0.5);
+        const sl  = Math.sin(px * 0.1) * Math.cos(pz * 0.1) * 0.5 + 0.5;
+        const col = new THREE.Color().setHSL(0.33, 0.6, 0.25 + sl * 0.15);
+        outerColors.push(col.r, col.g, col.b);
+    }
+    outerGeo.setAttribute('color', new THREE.Float32BufferAttribute(outerColors, 3));
+    outerGeo.computeVertexNormals();
+    outerMesh = new THREE.Mesh(outerGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    outerMesh.receiveShadow = true; outerMesh.frustumCulled = false;
+    yardEnvironmentGroup.add(outerMesh);
+
+    const fenceMat = new THREE.MeshStandardMaterial({ color: 0xE8E4C9 });
+    const fenceGeo = new THREE.BoxGeometry(YARD_SIZE, 10, 0.5);
+    const addFence = (x, z, rotY) => {
+        const f = new THREE.Mesh(fenceGeo, fenceMat);
+        f.position.set(x, getElevation(x, z) - 3, z);
+        if (rotY) f.rotation.y = rotY;
+        f.castShadow = true; f.receiveShadow = true; yardEnvironmentGroup.add(f);
+    };
+    addFence(0, -YARD_SIZE/2 - 0.25, 0); addFence(0, YARD_SIZE/2 + 0.25, 0);
+    addFence( YARD_SIZE/2 + 0.25, 0, Math.PI/2); addFence(-YARD_SIZE/2 - 0.25, 0, Math.PI/2);
+
+    const houseZ = -YARD_SIZE/2 - 6;
+    const house = new THREE.Mesh(new THREE.BoxGeometry(15, 16, 10), new THREE.MeshStandardMaterial({ color: 0xFFFFFF }));
+    house.position.set(0, getElevation(0, houseZ), houseZ); house.castShadow = true; yardEnvironmentGroup.add(house);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(11, 5, 4), new THREE.MeshStandardMaterial({ color: 0x8B0000 }));
+    roof.position.set(0, getElevation(0, houseZ) + 10.5, houseZ); roof.rotation.y = Math.PI/4; roof.castShadow = true; yardEnvironmentGroup.add(roof);
+
+    const bladeGeo = new THREE.BoxGeometry(GRASS_STEP * 0.9, 0.4, GRASS_STEP * 0.9);
+    bladeGeo.translate(0, 0.2, 0);
+    const grassMat = new THREE.MeshStandardMaterial({ color: 0x4CAF50, roughness: 0.8 });
+
+    yardGrassMesh = new THREE.InstancedMesh(bladeGeo, grassMat, YARD_GRASS_COUNT);
+    yardGrassMesh.castShadow = true; yardGrassMesh.receiveShadow = true;
+    yardGrassMesh.frustumCulled = false;
+    scene.add(yardGrassMesh);
+
+    infGrassMesh = new THREE.InstancedMesh(bladeGeo, grassMat, INF_GRASS_COUNT);
+    infGrassMesh.castShadow = true; infGrassMesh.receiveShadow = true;
+    infGrassMesh.frustumCulled = false; infGrassMesh.visible = false;
+    scene.add(infGrassMesh);
+
+    grassMesh = yardGrassMesh; 
+
+    infRockMesh = new THREE.InstancedMesh(
+        new THREE.DodecahedronGeometry(0.8, 1),
+        new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.9 }), MAX_INF_ROCKS);
+    infRockMesh.castShadow = true; infRockMesh.frustumCulled = false; scene.add(infRockMesh);
+
+    infStumpMesh = new THREE.InstancedMesh(
+        new THREE.CylinderGeometry(0.6, 0.8, 1.2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 1 }), MAX_INF_STUMPS);
+    infStumpMesh.castShadow = true; infStumpMesh.frustumCulled = false; scene.add(infStumpMesh);
+
+    particleMesh = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(0.12, 0.12, 0.12),
+        new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_PARTICLES);
+    particleMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); particleMesh.frustumCulled = false;
+    for (let p = 0; p < MAX_PARTICLES; p++) {
+        particlesData.push({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, maxLife: 1 });
+        particleMesh.setMatrixAt(p, new THREE.Matrix4().makeScale(0, 0, 0));
+        particleMesh.setColorAt(p, new THREE.Color(0xffffff)); 
+    }
+    scene.add(particleMesh);
+
+    weedMesh = new THREE.InstancedMesh(
+        new THREE.IcosahedronGeometry(0.2, 0),
+        new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.4 }), TOTAL_WEEDS);
+    weedMesh.castShadow = true; weedMesh.frustumCulled = false; scene.add(weedMesh);
+
+    const bugGeo = new THREE.ConeGeometry(0.04, 0.12, 4); bugGeo.rotateX(Math.PI / 2);
+    bugMesh = new THREE.InstancedMesh(bugGeo, new THREE.MeshBasicMaterial({ color: 0xffffaa }), NUM_BUGS);
+    bugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bugMesh.frustumCulled = false;
+    for (let i = 0; i < NUM_BUGS; i++) {
+        bugsData.push({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), home: new THREE.Vector3(), seed: Math.random()*100, offsetY: 0.5 + Math.random() });
+        bugMesh.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
+    }
+    scene.add(bugMesh);
+
+    cloudGroup = new THREE.Group();
+    const cloudGeo = new THREE.SphereGeometry(1, 16, 16);
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, fog: false });
+    for (let i = 0; i < 12; i++) {
+        const cloud = new THREE.Group();
+        const blobs = 5 + Math.floor(Math.random() * 6);
+        for (let b = 0; b < blobs; b++) {
+            const blob = new THREE.Mesh(cloudGeo, cloudMat);
+            blob.position.set((Math.random()-0.5)*12, Math.random()*2, (Math.random()-0.5)*12);
+            const s = 2 + Math.random()*3; blob.scale.set(s, s*0.6, s); blob.castShadow = true; cloud.add(blob);
+        }
+        cloud.position.set((Math.random()-0.5)*250, 40 + Math.random()*20, (Math.random()-0.5)*250);
+        cloud.userData = { speed: 1.0 + Math.random()*1.5 };
+        cloudGroup.add(cloud);
+    }
+    scene.add(cloudGroup);
+
+    sunMesh  = new THREE.Mesh(new THREE.CircleGeometry(15, 32), new THREE.MeshBasicMaterial({ color: 0xffffe0, fog: false }));
+    moonMesh = new THREE.Mesh(new THREE.CircleGeometry(10, 32), new THREE.MeshBasicMaterial({ color: 0xddddff, fog: false }));
+    scene.add(sunMesh); scene.add(moonMesh);
+
+    pollenMesh = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(0.04, 0.04, 0.04),
+        new THREE.MeshBasicMaterial({ color: 0xfff0aa, transparent: true, opacity: 0.6, fog: false }), NUM_POLLEN);
+    pollenMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); pollenMesh.frustumCulled = false;
+    for (let i = 0; i < NUM_POLLEN; i++) {
+        pollenData.push({ pos: new THREE.Vector3((Math.random()-0.5)*YARD_SIZE, Math.random()*6, (Math.random()-0.5)*YARD_SIZE), phase: Math.random()*Math.PI*2, speed: 0.5+Math.random() });
+        pollenMesh.setMatrixAt(i, new THREE.Matrix4());
+    }
+    scene.add(pollenMesh);
+
+    const ballGeo = new THREE.SphereGeometry(0.7, 32, 32);
+    for (let i = 0; i < 2; i++) {
+        const ballMat  = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(Math.random(), 0.9, 0.6), roughness: 0.2, metalness: 0.1 });
+        const bGroup   = new THREE.Group();
+        const bMesh    = new THREE.Mesh(ballGeo, ballMat); bMesh.castShadow = true; bGroup.add(bMesh);
+        scene.add(bGroup);
+        balls.push({ group: bGroup, mesh: bMesh, pos: new THREE.Vector3(), vel: new THREE.Vector3(), radius: 0.7 });
+    }
+}
+
+function createObstacle(isRock) {
+    const radius = isRock ? 0.8 + Math.random()*0.6 : 0.6 + Math.random()*0.4;
+    let geo, mesh;
+    if (isRock) {
+        geo  = new THREE.DodecahedronGeometry(radius, 1);
+        mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.9 }));
+    } else {
+        geo  = new THREE.CylinderGeometry(radius, radius + 0.2, 1.2, 8);
+        mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 1 }));
+    }
+    let x, z, tries = 0;
+    do { x = (Math.random()-0.5)*(YARD_SIZE-4); z = (Math.random()-0.5)*(YARD_SIZE-4); tries++; }
+    while (Math.sqrt(x*x + z*z) < 4 && tries < 50);
+    const baseY = getElevation(x, z);
+    mesh.position.set(x, isRock ? baseY + 0.1 : baseY + 0.6, z);
+    if (!isRock) { mesh.rotation.x = (Math.random()-0.5)*0.2; mesh.rotation.z = (Math.random()-0.5)*0.2; }
+    else         { mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, 0); }
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    yardEnvironmentGroup.add(mesh);
+    obstacles.push({ x, z, radius, mesh });
+}
+
+function buildItemsAndPowerups() {
+    bombGroup = new THREE.Group();
+    const bBody  = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), new THREE.MeshStandardMaterial({color: 0x222222, roughness: 0.9}));
+    const bCap   = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.2), new THREE.MeshStandardMaterial({color: 0x444444})); bCap.position.y = 0.5;
+    const bFuse  = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.3), new THREE.MeshStandardMaterial({color: 0x8B4513})); bFuse.position.set(0, 0.7, 0);
+    const bSpark = new THREE.Mesh(new THREE.SphereGeometry(0.08), new THREE.MeshBasicMaterial({color: 0xffaa00})); bSpark.position.set(0, 0.85, 0);
+    bombGroup.add(bBody, bCap, bFuse, bSpark); bombGroup.castShadow = true; scene.add(bombGroup); bombGroup.visible = false;
+
+    laserPowerupGroup = new THREE.Group();
+    laserPowerupGroup.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.5), new THREE.MeshBasicMaterial({color: 0x00ff00, wireframe: true})));
+    laserPowerupGroup.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.25), new THREE.MeshBasicMaterial({color: 0x00ff00})));
+    scene.add(laserPowerupGroup); laserPowerupGroup.visible = false;
+
+    waterGunPowerupGroup = new THREE.Group();
+    const wgBase   = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.8), new THREE.MeshStandardMaterial({color: 0x00aaff}));
+    const wgNozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4), new THREE.MeshStandardMaterial({color: 0xffffff}));
+    wgNozzle.rotation.x = Math.PI/2; wgNozzle.position.set(0, 0, 0.5);
+    waterGunPowerupGroup.add(wgBase, wgNozzle); scene.add(waterGunPowerupGroup); waterGunPowerupGroup.visible = false;
+
+    orbPowerupGroup = new THREE.Group();
+    const orbCore = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), new THREE.MeshStandardMaterial({color: 0x8a2be2, emissive: 0x4b0082, roughness: 0.1, metalness: 0.8}));
+    const orbRing = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.05, 8, 24), new THREE.MeshBasicMaterial({color: 0xd8bfd8})); orbRing.rotation.x = Math.PI/2;
+    orbPowerupGroup.add(orbCore, orbRing); scene.add(orbPowerupGroup); orbPowerupGroup.visible = false;
+
+    torchPowerupGroup = new THREE.Group();
+    const tpBase = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1), new THREE.MeshStandardMaterial({color: 0x8B4513}));
+    const tpHead = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshBasicMaterial({color: 0xff6600}));
+    tpHead.position.y = 0.5; torchPowerupGroup.add(tpBase, tpHead);
+    scene.add(torchPowerupGroup); torchPowerupGroup.visible = false;
+
+    laserMesh = new THREE.InstancedMesh(
+        new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8),
+        new THREE.MeshBasicMaterial({color: 0x00ff00}), MAX_LASERS);
+    laserMesh.geometry.rotateX(Math.PI / 2); scene.add(laserMesh);
+    for (let i = 0; i < MAX_LASERS; i++) {
+        lasersData.push({active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3()});
+        laserMesh.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
+    }
+}
+
+// =============================================================================
+// RC CAR BUILDING
+// =============================================================================
+function buildRcCar() {
+    rcGroup = new THREE.Group();
+    scene.add(rcGroup);
+
+    rcMesh = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.5), new THREE.MeshStandardMaterial({color: 0xff0088, metalness: 0.5}));
+    body.position.y = 0.1; body.castShadow = true;
+    rcMesh.add(body);
+
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.02, 0.1), new THREE.MeshStandardMaterial({color: 0x111111}));
+    spoiler.position.set(0, 0.25, 0.2); rcMesh.add(spoiler);
+    
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.4), new THREE.MeshStandardMaterial({color: 0xaaaaaa}));
+    antenna.position.set(0.1, 0.35, -0.15); rcMesh.add(antenna);
+
+    const wheelGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.05, 16); wheelGeo.rotateZ(Math.PI/2);
+    const wheelMat = new THREE.MeshStandardMaterial({color: 0x222222, roughness: 0.9});
+    [[-0.17, 0.08, 0.15], [0.17, 0.08, 0.15], [-0.17, 0.08, -0.15], [0.17, 0.08, -0.15]].forEach(p => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat); w.position.set(...p); rcMesh.add(w);
+    });
+
+    rcGroup.add(rcMesh);
+    rcGroup.visible = false;
+
+    // RC Ring Objective
+    rcRingGroup = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.08, 8, 24), new THREE.MeshStandardMaterial({color: 0xffd700, emissive: 0xaa8800}));
+    ring.position.y = 0.8;
+    rcRingGroup.add(ring);
+    scene.add(rcRingGroup);
+    rcRingGroup.visible = false;
+
+    // RC Jumps
+    rcJumpsGroup = new THREE.Group();
+    scene.add(rcJumpsGroup);
+    rcJumpsGroup.visible = false;
+}
+
+// =============================================================================
+// BASKETBALL BUILDING
+// =============================================================================
+function buildBasketball() {
+    hoopGroup = new THREE.Group();
+    
+    const hoopZ = -12; // Far enough forward into the yard so it doesn't clip the house
+    const hoopX = 0;
+
+    // Freestanding Backboard Pole
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 8), new THREE.MeshStandardMaterial({color: 0x555555}));
+    pole.position.set(hoopX, 4, hoopZ - 0.1);
+    pole.castShadow = true;
+
+    // Backboard
+    const backboard = new THREE.Mesh(new THREE.BoxGeometry(3, 2, 0.1), new THREE.MeshStandardMaterial({color: 0xffffff}));
+    backboard.position.set(hoopX, 8, hoopZ);
+    backboard.castShadow = true;
+
+    // Ring (Radius 1.0 = Diameter 2.0)
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.05, 8, 24), new THREE.MeshStandardMaterial({color: 0xff5500}));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(hoopX, 7.5, hoopZ + 1.0); 
+    ring.castShadow = true;
+
+    // Net
+    const netGeo = new THREE.CylinderGeometry(1.0, 0.6, 1.2, 16, 1, true);
+    const netMat = new THREE.MeshBasicMaterial({color: 0xeeeeee, wireframe: true, transparent: true, opacity: 0.5});
+    const net = new THREE.Mesh(netGeo, netMat);
+    net.position.set(hoopX, 6.9, hoopZ + 1.0);
+    
+    hoopGroup.add(pole, backboard, ring, net);
+    scene.add(hoopGroup);
+    hoopGroup.visible = false;
+
+    basketballGroup = new THREE.Group();
+    basketballMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), new THREE.MeshStandardMaterial({color: 0xd95a00, roughness: 0.9, bumpScale: 0.02}));
+    basketballMesh.castShadow = true;
+    basketballGroup.add(basketballMesh);
+    
+    aimMeshBball = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 5), new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.5 }));
+    aimMeshBball.geometry.translate(0, 2.5, 0);
+    aimMeshBball.rotation.x = -Math.PI / 2;
+    basketballGroup.add(aimMeshBball);
+    
+    scene.add(basketballGroup);
+    basketballGroup.visible = false;
+}
+
+function spawnRcRing() {
+    let x, z, tries = 0, valid = false;
+    const bounds = isInfinityMode ? 25 : (YARD_SIZE / 2 - 4);
+    while (!valid && tries < 100) {
+        if (isInfinityMode) {
+            x = mowerGroup.position.x + (Math.random() - 0.5) * bounds * 2;
+            z = mowerGroup.position.z + (Math.random() - 0.5) * bounds * 2;
+        } else {
+            x = (Math.random() - 0.5) * (YARD_SIZE - 4);
+            z = (Math.random() - 0.5) * (YARD_SIZE - 4);
+        }
+        valid = true;
+        if (!isInfinityMode) {
+            for (const obs of obstacles) {
+                if (Math.hypot(x - obs.x, z - obs.z) < obs.radius + 1.0) valid = false;
+            }
+        }
+        tries++;
+    }
+    rcRingGroup.position.set(x, getRcElevationWithJumps(x, z) + 0.8, z);
+    rcRingGroup.visible = true;
+}
+
+// =============================================================================
+// INFINITY GRID GENERATION
+// =============================================================================
+function updateInfinityGrid(force = false) {
+    if (!isInfinityMode) return;
+    const cx = Math.floor(mowerGroup.position.x / GRASS_STEP);
+    const cz = Math.floor(mowerGroup.position.z / GRASS_STEP);
+    if (!force && Math.abs(cx - lastMowerCellX) < 10 && Math.abs(cz - lastMowerCellZ) < 10) return;
+    lastMowerCellX = cx; lastMowerCellZ = cz;
+
+    infGroundMesh.position.set(cx * GRASS_STEP, 0, cz * GRASS_STEP);
+    const pos = infGroundMesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+        pos.setY(i, getElevation(infGroundMesh.position.x + pos.getX(i), infGroundMesh.position.z + pos.getZ(i)) - 0.1);
+    }
+    infGroundMesh.geometry.computeVertexNormals(); pos.needsUpdate = true;
+
+    let idx = 0, rockIdx = 0, stumpIdx = 0, weedIdx = 0;
+    const dm = new THREE.Matrix4(), dp = new THREE.Vector3(), ds = new THREE.Vector3(), dq = new THREE.Quaternion();
+    const eu = new THREE.Euler();
+
+    for (let r = -INF_GRID_RADIUS; r < INF_GRID_RADIUS; r++) {
+        for (let c = -INF_GRID_RADIUS; c < INF_GRID_RADIUS; c++) {
+            const wx = cx + c, wz = cz + r;
+            const k  = cellKey(wx, wz);       
+            const x  = wx * GRASS_STEP, z = wz * GRASS_STEP;
+            const y  = getElevation(x, z);
+            const hGrass = deterministicHash(wx + 999, wz + 999);
+            const hObs   = deterministicHash(wx, wz);
+
+            if (hObs >= 0.015 && hObs < 0.025 && !worldWeedMap.get(k) && weedIdx < TOTAL_WEEDS) {
+                dp.set(x, y + 0.5, z); eu.set(hObs*100, hObs*100, hObs*100); dq.setFromEuler(eu); ds.set(1,1,1);
+                dm.compose(dp, dq, ds); weedMesh.setMatrixAt(weedIdx++, dm);
+            }
+
+            dp.set(x, y, z); dq.identity();
+            if (worldMowedMap.get(k)) {
+                ds.set(1, 0.1, 1);
+                grassMesh.setColorAt(idx, _tempColor.set(0x7CFC00)); 
+            } else {
+                const wb = worldWateredMap.get(k) || 0;
+                ds.set(1, 1 + wb + (hGrass * 0.3), 1);
+                grassMesh.setColorAt(idx, _tempColor.setHSL(0.33, 0.5, 0.4 + (hGrass - 0.5) * 0.1)); 
+            }
+            dm.compose(dp, dq, ds); grassMesh.setMatrixAt(idx++, dm);
+        }
+    }
+
+    ds.set(0,0,0); dm.compose(dp, dq, ds);
+    while (rockIdx  < MAX_INF_ROCKS)  infRockMesh.setMatrixAt(rockIdx++,  dm);
+    while (stumpIdx < MAX_INF_STUMPS) infStumpMesh.setMatrixAt(stumpIdx++, dm);
+    while (weedIdx  < TOTAL_WEEDS)    weedMesh.setMatrixAt(weedIdx++, dm);
+
+    grassMesh.instanceMatrix.needsUpdate = true;
+    if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+    infRockMesh.instanceMatrix.needsUpdate  = true;
+    infStumpMesh.instanceMatrix.needsUpdate = true;
+    weedMesh.instanceMatrix.needsUpdate     = true;
+}
+
+// =============================================================================
+// GOLF BUILDING
+// =============================================================================
+function buildGolf() {
+    golfGroup = new THREE.Group();
+    scene.add(golfGroup);
+
+    golfBallMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(golfState.radius, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 }));
+    golfBallMesh.castShadow = true; golfGroup.add(golfBallMesh);
+
+    golfHoleGroup = new THREE.Group();
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x111111, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    const holeMesh = new THREE.Mesh(new THREE.CircleGeometry(GOLF_HOLE_RADIUS, 32), holeMat);
+    holeMesh.rotation.x = -Math.PI / 2; golfHoleGroup.add(holeMesh);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 3), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
+    pole.position.y = 1.5; pole.castShadow = true; golfHoleGroup.add(pole);
+    const flagGeo = new THREE.ConeGeometry(0.4, 0.6, 3); flagGeo.rotateZ(-Math.PI / 2);
+    const flag = new THREE.Mesh(flagGeo, new THREE.MeshStandardMaterial({ color: 0xff0000 }));
+    flag.position.set(0.3, 2.7, 0); flag.castShadow = true; golfHoleGroup.add(flag);
+    golfHoleGroup.visible = false;
+    scene.add(golfHoleGroup); 
+
+    golfClubGroup = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.5), new THREE.MeshStandardMaterial({ color: 0x888888 }));
+    shaft.position.y = 0.75; golfClubGroup.add(shaft);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.3), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+    head.position.set(0.1, 0.05, 0); golfClubGroup.add(head);
+    golfClubGroup.position.set(0, 0, 0.5);
+    golfClubPivot = new THREE.Group(); golfClubPivot.add(golfClubGroup); golfGroup.add(golfClubPivot);
+
+    const aimGeo = new THREE.PlaneGeometry(0.05, 5); aimGeo.translate(0, 2.5, 0);
+    aimMesh = new THREE.Mesh(aimGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
+    aimMesh.rotation.x = -Math.PI / 2; golfGroup.add(aimMesh);
+
+    golfLight = new THREE.SpotLight(0xffffff, 0, 20, Math.PI/5, 0.5, 1);
+    golfLight.castShadow = true; golfLight.shadow.mapSize.width = 512; golfLight.shadow.mapSize.height = 512;
+    golfGroup.add(golfLight); golfGroup.add(golfLight.target);
+    golfLightRef = golfLight; 
+}
+
+// =============================================================================
+// DARTS BUILDING
+// =============================================================================
+function buildDarts() {
+    dartsGroup = new THREE.Group();
+    scene.add(dartsGroup);
+
+    dartMesh = new THREE.Group();
+    
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.3, 8), new THREE.MeshStandardMaterial({color: 0xcccccc, metalness: 0.8}));
+    tip.position.y = -0.15; 
+    tip.castShadow = true;
+    
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 8), new THREE.MeshStandardMaterial({color: 0xee2222}));
+    body.position.y = -0.75; 
+    body.castShadow = true;
+    
+    const finGeom = new THREE.PlaneGeometry(0.4, 0.4);
+    const finMat = new THREE.MeshStandardMaterial({color: 0x2222ee, side: THREE.DoubleSide});
+    const fin1 = new THREE.Mesh(finGeom, finMat);
+    fin1.position.y = -1.0; fin1.castShadow = true;
+    const fin2 = new THREE.Mesh(finGeom, finMat);
+    fin2.rotation.y = Math.PI/2; fin2.position.y = -1.0; fin2.castShadow = true;
+    
+    dartMesh.add(tip, body, fin1, fin2);
+    dartsGroup.add(dartMesh);
+
+    dartTargetGroup = new THREE.Group();
+    const ring1 = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.8, 32), new THREE.MeshBasicMaterial({color: 0xffffff, side: THREE.DoubleSide}));
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.4, 1.0, 32), new THREE.MeshBasicMaterial({color: 0xff0000, side: THREE.DoubleSide}));
+    const ring3 = new THREE.Mesh(new THREE.CircleGeometry(0.4, 32), new THREE.MeshBasicMaterial({color: 0x0000ff})); 
+    ring1.rotation.x = -Math.PI/2; ring2.rotation.x = -Math.PI/2; ring3.rotation.x = -Math.PI/2;
+    ring1.position.y = 0.01; ring2.position.y = 0.02; ring3.position.y = 0.03; 
+    dartTargetGroup.add(ring1, ring2, ring3);
+    dartTargetGroup.visible = false;
+    scene.add(dartTargetGroup); 
+
+    const aimGeo = new THREE.PlaneGeometry(0.05, 5); aimGeo.translate(0, 2.5, 0);
+    aimMeshDarts = new THREE.Mesh(aimGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
+    aimMeshDarts.rotation.x = -Math.PI / 2; dartsGroup.add(aimMeshDarts);
+
+    dartLight = new THREE.SpotLight(0xffffff, 0, 20, Math.PI/5, 0.5, 1);
+    dartLight.castShadow = true; dartLight.shadow.mapSize.width = 512; dartLight.shadow.mapSize.height = 512;
+    dartsGroup.add(dartLight); dartsGroup.add(dartLight.target);
+    dartLightRef = dartLight;
+}
+
+// =============================================================================
+// DETECTOR BUILDING
+// =============================================================================
+function buildDetector() {
+    detectorGroup = new THREE.Group();
+    scene.add(detectorGroup);
+
+    detectorMesh = new THREE.Group();
+    
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.15, 16, 1, true, 0, Math.PI), new THREE.MeshStandardMaterial({color: 0x111111, side: THREE.DoubleSide}));
+    cuff.rotation.x = Math.PI / 4;
+    cuff.position.set(0, 1.45, -0.15);
+
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.0), new THREE.MeshStandardMaterial({color: 0xaaaaaa, metalness: 0.8, roughness: 0.2}));
+    handle.rotation.x = Math.PI / 4;
+    handle.position.set(0, 0.8, 0.5);
+
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.3), new THREE.MeshStandardMaterial({color: 0x111111}));
+    grip.rotation.x = Math.PI / 4;
+    grip.position.set(0, 1.1, 0.2);
+
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.15), new THREE.MeshStandardMaterial({color: 0xffaa00}));
+    box.rotation.x = Math.PI / 4;
+    box.position.set(0, 0.95, 0.35);
+    
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.15), new THREE.MeshBasicMaterial({color: 0x002200}));
+    screen.rotation.x = Math.PI / 4;
+    screen.position.set(0, 1.0, 0.43);
+
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.04, 16, 32), new THREE.MeshStandardMaterial({color: 0x111111}));
+    coil.rotation.x = Math.PI / 2;
+    coil.position.set(0, 0.15, 1.2);
+
+    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.7), new THREE.MeshStandardMaterial({color: 0x111111}));
+    crossbar.position.set(0, 0.15, 1.2);
+
+    detectorMesh.add(handle, cuff, grip, box, screen, coil, crossbar);
+    detectorGroup.add(detectorMesh);
+
+    detectorLight = new THREE.SpotLight(0xffffff, 0, 15, Math.PI/4, 0.5, 1);
+    detectorLight.position.set(0, 1.5, 0);
+    detectorLight.target.position.set(0, 0, 2);
+    detectorLight.castShadow = true;
+    detectorLight.shadow.mapSize.width = 512;
+    detectorLight.shadow.mapSize.height = 512;
+    detectorGroup.add(detectorLight);
+    detectorGroup.add(detectorLight.target);
+    
+    detectorGroup.visible = false;
+}
+
+// =============================================================================
+// UI HELPERS
+// =============================================================================
+function updateProgressUI() {
+    if (isInfinityMode) return;
+    const pct = (mowedCount / YARD_GRASS_COUNT) * 100;
+    document.getElementById('progress-text').innerText = pct.toFixed(1) + '%';
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('weed-text').innerText = `${weedsMowed}/50`;
+}
+
+function showNotification(title, subtitle, duration) {
+    const el = document.getElementById('notification-msg');
+    document.getElementById('notif-title').innerText = title;
+    document.getElementById('notif-sub').innerText   = subtitle;
+    el.style.opacity = '1'; el.style.transform = 'translate(-50%, -50%) scale(1)';
+    setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translate(-50%, -50%) scale(0.75)'; }, duration);
+}
+
+function updateTorchUI() {
+    const icon = document.getElementById('icon-torch');
+    const count = document.getElementById('torch-count');
+    if (count) count.innerText = typeof torchesInventory !== 'undefined' ? torchesInventory : 0;
+    if (typeof torchesInventory !== 'undefined' && torchesInventory > 0) {
+        if (icon) icon.classList.remove('opacity-40');
+    } else {
+        if (icon) icon.classList.add('opacity-40');
+    }
+}
+
+// =============================================================================
+// POPULATE YARD (Classic Mode)
+// =============================================================================
+function populateYard(isReset) {
+    if (isReset) {
+        terrainSeedOffsetX = Math.random() * 100;
+        terrainSeedOffsetZ = Math.random() * 100;
+        elevationCache.clear(); 
+
+        const regenGeo = (geo, offset) => {
+            const p = geo.attributes.position;
+            for (let i = 0; i < p.count; i++) p.setY(i, getElevation(p.getX(i), p.getZ(i)) - offset);
+            geo.computeVertexNormals(); p.needsUpdate = true;
+        };
+        regenGeo(yardGroundMesh.geometry, 0.1);
+
+        const outerP = outerMesh.geometry.attributes.position;
+        const outerC = outerMesh.geometry.attributes.color;
+        for (let i = 0; i < outerP.count; i++) {
+            const px = outerP.getX(i), pz = outerP.getZ(i);
+            outerP.setY(i, getElevation(px, pz) - 0.5);
+            const sl  = Math.sin(px * 0.1) * Math.cos(pz * 0.1) * 0.5 + 0.5;
+            const col = _tempColor.setHSL(0.33, 0.6, 0.25 + sl * 0.15);
+            outerC.setXYZ(i, col.r, col.g, col.b);
+        }
+        outerMesh.geometry.computeVertexNormals(); outerP.needsUpdate = true; outerC.needsUpdate = true;
+
+        obstacles.forEach(obs => { yardEnvironmentGroup.remove(obs.mesh); obs.mesh.geometry.dispose(); obs.mesh.material.dispose(); });
+        obstacles = [];
+        mowedCount = 0; weedsMowed = 0;
+
+        bombSpawned = false; bombActive = false; bombGroup.visible = false;
+        laserPowerupActive = false; laserPowerupGroup.visible = false;
+        hasWaterGun = false; waterGunPowerupGroup.visible = false; waterGunTimer = 0;
+        hasOrb = false; orbPowerupGroup.visible = false; orbTimer = 0;
+        
+        placedTorches.forEach(t => scene.remove(t));
+        placedTorches.length = 0; torchesInventory = 0; torchPowerupGroup.visible = false; torchTimer = 0;
+        updateTorchUI();
+        
+        hoverTimer = 0;
+
+        dartsState.score = 0;
+        document.getElementById('darts-score').innerText = 'Score: 0';
+        
+        bballState.score = 0;
+        document.getElementById('bball-score').innerText = 'Score: 0';
+
+        document.querySelectorAll('.tool-icon').forEach(el => el.classList.add('opacity-40'));
+
+        mowerHasLaser = false; laserTimeLeft = 0; laserTimer = 0;
+        lasersData.forEach(l => l.active = false);
+
+        // Reset RC Jumps
+        while(rcJumpsGroup.children.length > 0) rcJumpsGroup.remove(rcJumpsGroup.children[0]);
+        rcJumps = [];
+        for (let i = 0; i < 3; i++) {
+            let jx, jz, jTries = 0, jValid = false;
+            while (!jValid && jTries < 50) {
+                jx = (Math.random() - 0.5) * (YARD_SIZE - 10);
+                jz = (Math.random() - 0.5) * (YARD_SIZE - 10);
+                jValid = true;
+                for (const obs of obstacles) if (Math.hypot(jx - obs.x, jz - obs.z) < obs.radius + 2) jValid = false;
+                jTries++;
+            }
+            const jYaw = Math.random() * Math.PI * 2;
+            const jBaseY = getElevation(jx, jz);
+            rcJumps.push({ x: jx, z: jz, yaw: jYaw, baseY: jBaseY });
+            
+            const rampGeo = new THREE.BoxGeometry(3, 0.2, 3);
+            rampGeo.translate(0, 0.1, 1.5);
+            rampGeo.rotateX(-Math.atan2(1.5, 3)); 
+            const rampMesh = new THREE.Mesh(rampGeo, new THREE.MeshStandardMaterial({color: 0xee5500, roughness: 0.8}));
+            rampMesh.position.set(jx, jBaseY, jz);
+            rampMesh.rotation.y = jYaw;
+            rampMesh.castShadow = true; rampMesh.receiveShadow = true;
+            rcJumpsGroup.add(rampMesh);
+        }
+    }
+
+    for (let i = 0; i < NUM_ROCKS;  i++) createObstacle(true);
+    for (let i = 0; i < NUM_STUMPS; i++) createObstacle(false);
+
+    // Setup Buried Treasures
+    buriedTreasures = [];
+    worldTreasureMap.clear();
+    const lootTable = [
+        { name: 'Old Bottle Cap', val: 5 },
+        { name: 'Rusty Horseshoe', val: 15 },
+        { name: 'Silver Coin', val: 25 },
+        { name: 'Time Capsule', val: 50 },
+        { name: 'Diamond Ring', val: 100 }
+    ];
+    for (let i = 0; i < 5; i++) {
+        let tx, tz, tries = 0, valid = false;
+        while (!valid && tries < 50) {
+            tx = (Math.random() - 0.5) * (YARD_SIZE - 2);
+            tz = (Math.random() - 0.5) * (YARD_SIZE - 2);
+            valid = true;
+            for (const obs of obstacles) {
+                if (Math.hypot(tx - obs.x, tz - obs.z) < obs.radius + 0.5) valid = false;
+            }
+            tries++;
+        }
+        const loot = lootTable[Math.floor(Math.random() * lootTable.length)];
+        buriedTreasures.push({ x: tx, z: tz, found: false, name: loot.name, val: loot.val });
+    }
+
+    const dummy    = new THREE.Object3D();
+    let idx        = 0;
+    const halfYard = YARD_SIZE / 2;
+
+    for (let row = 0; row < GRASS_GRID_SIZE; row++) {
+        for (let col = 0; col < GRASS_GRID_SIZE; col++) {
+            yardGrassStates[idx]  = 0;
+            yardGrassWatered[idx] = 0;
+            const x = (col * GRASS_STEP) - halfYard + (GRASS_STEP / 2);
+            const z = (row * GRASS_STEP) - halfYard + (GRASS_STEP / 2);
+            const y = getElevation(x, z);
+
+            let underObstacle = false;
+            for (const obs of obstacles) {
+                if (Math.sqrt((x-obs.x)**2 + (z-obs.z)**2) < obs.radius + 0.3) { underObstacle = true; break; }
+            }
+            if (underObstacle) {
+                yardGrassStates[idx] = 1; mowedCount++;
+                dummy.position.set(x, y - 10, z); dummy.scale.set(0, 0, 0);
+            } else {
+                dummy.position.set(x, y, z);
+                dummy.scale.set(1, 1 + Math.random()*0.3, 1);
+            }
+            dummy.updateMatrix();
+            yardGrassMesh.setMatrixAt(idx, dummy.matrix);
+            yardGrassMesh.setColorAt(idx, _tempColor.setHSL(0.33, 0.5, 0.4 + (Math.random()-0.5)*0.1)); 
+            idx++;
+        }
+    }
+    for (let i = idx; i < YARD_GRASS_COUNT; i++) {
+        dummy.scale.set(0,0,0); dummy.updateMatrix(); yardGrassMesh.setMatrixAt(i, dummy.matrix);
+    }
+    yardGrassMesh.instanceMatrix.needsUpdate = true;
+    if (yardGrassMesh.instanceColor) yardGrassMesh.instanceColor.needsUpdate = true;
+
+    yardWeedStates.fill(0);
+    let weedsPlaced = 0;
+    const td = new THREE.Object3D();
+    while (weedsPlaced < 50) {
+        const ri = Math.floor(Math.random() * YARD_GRASS_COUNT);
+        if (yardWeedStates[ri] === 0 && yardGrassStates[ri] === 0) {
+            const row = Math.floor(ri / GRASS_GRID_SIZE), col = ri % GRASS_GRID_SIZE;
+            const x = (col * GRASS_STEP) - halfYard + (GRASS_STEP/2) + (Math.random()-0.5)*0.3;
+            const z = (row * GRASS_STEP) - halfYard + (GRASS_STEP/2) + (Math.random()-0.5)*0.3;
+            td.position.set(x, getElevation(x, z) + 0.5, z);
+            td.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+            const s = 0.8 + Math.random()*0.5; td.scale.set(s, s, s);
+            td.updateMatrix(); weedMesh.setMatrixAt(weedsPlaced, td.matrix);
+            yardWeedStates[ri] = weedsPlaced + 1;
+            weedsPlaced++;
+        }
+    }
+    for (let i = 50; i < TOTAL_WEEDS; i++) { td.scale.set(0,0,0); td.updateMatrix(); weedMesh.setMatrixAt(i, td.matrix); }
+    weedMesh.instanceMatrix.needsUpdate = true;
+
+    for (let i = 0; i < NUM_BUGS; i++) {
+        const x = (Math.random()-0.5)*YARD_SIZE, z = (Math.random()-0.5)*YARD_SIZE;
+        const b = bugsData[i];
+        b.home.set(x, getElevation(x, z) + b.offsetY, z); b.pos.copy(b.home);
+    }
+    balls.forEach(b => { b.pos.set((Math.random()-0.5)*(YARD_SIZE-4), 10, (Math.random()-0.5)*(YARD_SIZE-4)); b.vel.set(0,0,0); });
+
+    if (isGolfMode) spawnGolfHole();
+    if (isDartsMode) spawnDartTarget();
+    if (isRcMode) spawnRcRing();
+    updateProgressUI();
+}
+
+// =============================================================================
+// MOWER BUILDING
+// =============================================================================
+function buildMower() {
+    mowerGroup    = new THREE.Group();
+    mowerBodyMesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 1.6), new THREE.MeshStandardMaterial({ color: 0xCC0000 }));
+    mowerBodyMesh.position.y = 0.4; mowerBodyMesh.castShadow = true; mowerGroup.add(mowerBodyMesh);
+
+    const engine = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.8), new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.3 }));
+    engine.position.set(0, 0.75, 0); engine.castShadow = true; mowerGroup.add(engine);
+
+    const wheelGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.15, 16); wheelGeo.rotateZ(Math.PI/2);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+    [[-0.65,0.25,0.6],[0.65,0.25,0.6],[-0.65,0.25,-0.6],[0.65,0.25,-0.6]].forEach(p => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat); w.position.set(...p); w.castShadow = true; mowerGroup.add(w);
+    });
+
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+    [[-0.45],[0.45]].forEach(([xOff]) => {
+        const mount = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2), handleMat); mount.position.set(xOff, 0.6, -0.6); mowerGroup.add(mount);
+        const barGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.8); barGeo.translate(0, 0.9, 0); barGeo.rotateX(-Math.PI/4);
+        const bar = new THREE.Mesh(barGeo, handleMat); bar.position.set(xOff, 0.6, -0.6); mowerGroup.add(bar);
+    });
+    const crossBarGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.0); crossBarGeo.rotateZ(Math.PI/2);
+    mowerGroup.add(new THREE.Mesh(crossBarGeo, handleMat)).position.set(0, 1.873, -1.873);
+
+    for (const xOff of [-0.4, 0.4]) {
+        const light = new THREE.SpotLight(0xffffff, 0, 20, Math.PI/5, 0.5, 1);
+        light.position.set(xOff, 0.5, 0.8); light.target.position.set(xOff, 0, 5);
+        light.castShadow = true; light.shadow.mapSize.width = 512; light.shadow.mapSize.height = 512;
+        mowerGroup.add(light); mowerGroup.add(light.target);
+        headlights.push(light);
+    }
+    scene.add(mowerGroup);
+    mowerGroup.position.set(0, getElevation(0, 0), 0);
+}
+
+// =============================================================================
+// INPUT SETUP
+// =============================================================================
+function setupInput() {
+    const startAudio = () => {
+        if (!audioCtx) initAudio();
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    };
+
+    window.addEventListener('keydown', e => {
+        startAudio();
+        switch (e.code) {
+            case 'KeyW': case 'ArrowUp':    keys.forward  = true; break;
+            case 'KeyS': case 'ArrowDown':  keys.backward = true; break;
+            case 'KeyA': case 'ArrowLeft':  keys.left     = true; break;
+            case 'KeyD': case 'ArrowRight': keys.right    = true; break;
+            case 'KeyH': keys.water = true; break;
+            case 'Space':
+                if (isGolfMode && !golfState.charging && golfState.vel.lengthSq() < 0.1 && golfState.active) {
+                    golfState.aimYaw = camYaw; golfState.charging = true; golfState.power = 0;
+                } else if (isDartsMode && !dartsState.charging && dartsState.state === 'idle') {
+                    dartsState.aimYaw = camYaw; dartsState.charging = true; dartsState.power = 0;
+                } else if (isBasketballMode && !bballState.charging && bballState.state === 'idle') {
+                    bballState.aimYaw = camYaw; bballState.charging = true; bballState.power = 0;
+                } else if (isDetectorMode) {
+                    digTreasure();
+                } else if (!isRcMode && upgrades.hover.level > 0 && hoverCooldown <= 0 && hoverTimer <= 0) {
+                    hoverTimer = 5.0; 
+                    hoverCooldown = 15.0;
+                    showNotification('HOVER THRUSTERS ENGAGED', '5 Seconds of Flight!', 2000);
+                }
+                break;
+            case 'KeyG':
+                if (isGameRunning && !isGolfMode && !isDartsMode && !isBasketballMode && !isDetectorMode && !isRcMode && mowerHasLaser && laserCooldown <= 0) { fireLaser(); laserCooldown = 0.2; }
+                break;
+            case 'KeyT':
+                if (isGameRunning && torchesInventory > 0 && !isDetectorMode && !isRcMode) placeTorch();
+                break;
+            case 'KeyO':
+                if (isGameRunning && hasOrb) toggleDayNight();
+                break;
+            case 'KeyL':
+                if (isGameRunning) toggleDartsMode();
+                break;
+            case 'KeyM':
+                if (isGameRunning) toggleDetectorMode();
+                break;
+        }
+    });
+
+    window.addEventListener('keyup', e => {
+        switch (e.code) {
+            case 'KeyW': case 'ArrowUp':    keys.forward  = false; break;
+            case 'KeyS': case 'ArrowDown':  keys.backward = false; break;
+            case 'KeyA': case 'ArrowLeft':  keys.left     = false; break;
+            case 'KeyD': case 'ArrowRight': keys.right    = false; break;
+            case 'KeyH': keys.water = false; break;
+            case 'KeyE': case 'Tab': if (isGameRunning) { e.preventDefault(); toggleShop(); } break;
+            case 'Space': 
+                if (isGolfMode && golfState.charging) hitGolfBall(); 
+                else if (isDartsMode && dartsState.charging) throwDart();
+                else if (isBasketballMode && bballState.charging) throwBasketball();
+                break;
+        }
+    });
+
+    window.addEventListener('mousedown', e => { 
+        startAudio();
+        if (e.target.tagName !== 'CANVAS') return; 
+        isDraggingCam = true; prevMousePos = { x: e.clientX, y: e.clientY }; 
+    });
+    window.addEventListener('mousemove', e => {
+        if (!isDraggingCam) return;
+        camYaw   -= (e.clientX - prevMousePos.x) * 0.005;
+        camPitch += (e.clientY - prevMousePos.y) * 0.005;
+        camPitch  = Math.max(0.1, Math.min(Math.PI/2 - 0.1, camPitch));
+        prevMousePos = { x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener('mouseup',    () => isDraggingCam = false);
+    window.addEventListener('mouseleave', () => isDraggingCam = false);
+
+    window.addEventListener('wheel', e => {
+        if (isShopOpen || !isGameRunning) return;
+        const maxDist = isInfinityMode ? 25 : 40;
+        camDistance = Math.max(4, Math.min(maxDist, camDistance + e.deltaY * 0.01));
+    }, { passive: true });
+}
+
+// =============================================================================
+// GAME MODES (GOLF, DARTS, DETECTOR, RC CAR, BASKETBALL)
+// =============================================================================
+
+function toggleInfinityMode() {
+    isInfinityMode = !isInfinityMode;
+    const btn = document.getElementById('btn-infinity-toggle');
+    btn.innerText = isInfinityMode ? '🌌 Infinity: ON' : '🌌 Infinity: OFF';
+
+    if (isInfinityMode) {
+        grassMesh = infGrassMesh;
+        yardGrassMesh.visible = false;
+        infGrassMesh.visible  = true;
+        yardEnvironmentGroup.visible = false;
+        infGroundMesh.visible        = true;
+        if (camDistance > 25) camDistance = 25;
+        document.getElementById('progress-bar-container').style.display = 'none';
+        document.getElementById('progress-text').innerText = '∞';
+        document.getElementById('hud-weeds').style.display = 'none';
+        updateInfinityGrid(true);
+    } else {
+        grassMesh = yardGrassMesh;
+        infGrassMesh.visible  = false;
+        yardGrassMesh.visible = true;
+        yardEnvironmentGroup.visible = true;
+        infGroundMesh.visible        = false;
+        document.getElementById('progress-bar-container').style.display = 'block';
+        document.getElementById('hud-weeds').style.display = 'block';
+        populateYard(false); 
+    }
+}
+
+function setGameMode(mode) {
+    if (mode === 'golf' && isGolfMode) return;
+    if (mode === 'darts' && isDartsMode) return;
+    if (mode === 'detector' && isDetectorMode) return;
+    if (mode === 'rc' && isRcMode) return;
+    if (mode === 'basketball' && isBasketballMode) return;
+    if (mode === 'mower' && !isGolfMode && !isDartsMode && !isDetectorMode && !isRcMode && !isBasketballMode) return;
+
+    isGolfMode = (mode === 'golf');
+    isDartsMode = (mode === 'darts');
+    isDetectorMode = (mode === 'detector');
+    isRcMode = (mode === 'rc');
+    isBasketballMode = (mode === 'basketball');
+
+    const btnGolf = document.getElementById('btn-golf-toggle');
+    const btnDarts = document.getElementById('btn-darts-toggle');
+    const btnDetector = document.getElementById('btn-detector-toggle');
+    const btnRc = document.getElementById('btn-rccar-toggle');
+    const btnBball = document.getElementById('btn-bball-toggle');
+    
+    const guiGolf = document.getElementById('golf-ui');
+    const guiDarts = document.getElementById('darts-ui');
+    const guiDetector = document.getElementById('detector-ui');
+    const guiBball = document.getElementById('bball-ui');
+
+    // Reset buttons to default styling
+    btnGolf.innerText = '⛳ Golf'; btnGolf.classList.replace('text-green-700', 'text-indigo-700'); btnGolf.classList.replace('border-green-400', 'border-indigo-400');
+    btnDarts.innerText = '🎯 Darts'; btnDarts.classList.replace('text-green-700', 'text-orange-700'); btnDarts.classList.replace('border-green-400', 'border-orange-400');
+    btnDetector.innerText = '🔍 Detect'; btnDetector.classList.replace('text-green-700', 'text-teal-700'); btnDetector.classList.replace('border-green-400', 'border-teal-400');
+    btnRc.innerText = '🚗 RC Car'; btnRc.classList.replace('text-green-700', 'text-pink-700'); btnRc.classList.replace('border-green-400', 'border-pink-400');
+    btnBball.innerText = '🏀 Hoops'; btnBball.classList.replace('text-green-700', 'text-amber-700'); btnBball.classList.replace('border-green-400', 'border-amber-400');
+
+    // Reset charging states
+    golfState.charging = false; dartsState.charging = false; bballState.charging = false;
+    document.getElementById('golf-power-bar').style.width = '0%';
+    document.getElementById('darts-power-bar').style.width = '0%';
+    document.getElementById('bball-power-bar').style.width = '0%';
+
+    // Group Visibility
+    mowerGroup.visible = (mode === 'mower');
+    golfGroup.visible = isGolfMode; golfHoleGroup.visible = isGolfMode;
+    if (dartsGroup) dartsGroup.visible = isDartsMode; 
+    if (dartTargetGroup) dartTargetGroup.visible = isDartsMode;
+    if (detectorGroup) detectorGroup.visible = isDetectorMode;
+    if (rcGroup) rcGroup.visible = isRcMode;
+    if (rcRingGroup) rcRingGroup.visible = isRcMode;
+    if (rcJumpsGroup) rcJumpsGroup.visible = isRcMode;
+    if (hoopGroup) hoopGroup.visible = isBasketballMode;
+    if (basketballGroup) basketballGroup.visible = isBasketballMode;
+    
+    // UI Visibility
+    guiGolf.style.display = isGolfMode ? 'flex' : 'none';
+    guiDarts.style.display = isDartsMode ? 'flex' : 'none';
+    guiDetector.style.display = isDetectorMode ? 'flex' : 'none';
+    guiBball.style.display = isBasketballMode ? 'flex' : 'none';
+
+    if (isGolfMode) {
+        btnGolf.innerText = '🚜 Mower'; btnGolf.classList.replace('text-indigo-700', 'text-green-700'); btnGolf.classList.replace('border-indigo-400', 'border-green-400');
+        golfState.pos.copy(mowerGroup.position);
+        golfState.pos.y = getElevation(golfState.pos.x, golfState.pos.z) + 2;
+        golfState.vel.set(0, 0, 0);
+        golfState.active = true; golfState.strokes = 0; golfState.aimYaw = camYaw;
+        spawnGolfHole();
+        camDistance = 8; camPitch = 0.4;
+    } else if (isDartsMode) {
+        btnDarts.innerText = '🚜 Mower'; btnDarts.classList.replace('text-orange-700', 'text-green-700'); btnDarts.classList.replace('border-orange-400', 'border-green-400');
+        dartsState.pos.copy(mowerGroup.position);
+        dartsState.pos.y = getElevation(dartsState.pos.x, dartsState.pos.z) + 2;
+        dartsState.vel.set(0, 0, 0);
+        dartsState.active = true; dartsState.aimYaw = camYaw;
+        dartsState.state = 'idle';
+        spawnDartTarget();
+        camDistance = 10; camPitch = 0.5;
+        document.getElementById('darts-score').innerText = `Score: ${dartsState.score}`;
+    } else if (isBasketballMode) {
+        btnBball.innerText = '🚜 Mower'; btnBball.classList.replace('text-amber-700', 'text-green-700'); btnBball.classList.replace('border-amber-400', 'border-green-400');
+        bballState.pos.copy(mowerGroup.position);
+        bballState.pos.y = getElevation(bballState.pos.x, bballState.pos.z) + 2;
+        bballState.vel.set(0, 0, 0);
+        bballState.active = true; bballState.aimYaw = camYaw;
+        bballState.state = 'idle';
+        camDistance = 12; camPitch = 0.4;
+        document.getElementById('bball-score').innerText = `Score: ${bballState.score}`;
+    } else if (isDetectorMode) {
+        btnDetector.innerText = '🚜 Mower'; btnDetector.classList.replace('text-teal-700', 'text-green-700'); btnDetector.classList.replace('border-teal-400', 'border-green-400');
+        detectorState.pos.copy(mowerGroup.position);
+        detectorState.pos.y = getElevation(detectorState.pos.x, detectorState.pos.z);
+        detectorState.speed = 0;
+        detectorState.heading = camYaw;
+        camDistance = 6; camPitch = 0.6;
+        document.getElementById('detector-signal-bar').style.width = '0%';
+        document.getElementById('detector-status').innerText = 'SEARCHING...';
+    } else if (isRcMode) {
+        btnRc.innerText = '🚜 Mower'; btnRc.classList.replace('text-pink-700', 'text-green-700'); btnRc.classList.replace('border-pink-400', 'border-green-400');
+        rcState.pos.copy(mowerGroup.position);
+        rcState.pos.y = getRcElevationWithJumps(rcState.pos.x, rcState.pos.z) + 0.1;
+        rcState.vel.set(0,0,0);
+        rcState.speed = 0;
+        rcState.heading = camYaw;
+        rcState.isAirborne = false;
+        spawnRcRing();
+        camDistance = 4; camPitch = 0.3;
+    }
+}
+
+function toggleGolfMode() { setGameMode(isGolfMode ? 'mower' : 'golf'); }
+function toggleDartsMode() { setGameMode(isDartsMode ? 'mower' : 'darts'); }
+function toggleDetectorMode() { setGameMode(isDetectorMode ? 'mower' : 'detector'); }
+function toggleRcMode() { setGameMode(isRcMode ? 'mower' : 'rc'); }
+function toggleBasketballMode() { setGameMode(isBasketballMode ? 'mower' : 'basketball'); }
+
+function spawnGolfHole() {
+    let x, z, tries = 0, valid = false;
+    const bounds = isInfinityMode ? 25 : (YARD_SIZE / 2 - 4);
+    while (!valid && tries < 100) {
+        if (isInfinityMode) {
+            x = mowerGroup.position.x + (Math.random() - 0.5) * bounds * 2;
+            z = mowerGroup.position.z + (Math.random() - 0.5) * bounds * 2;
+        } else {
+            x = (Math.random() - 0.5) * (YARD_SIZE - 4);
+            z = (Math.random() - 0.5) * (YARD_SIZE - 4);
+        }
+        valid = true;
+        if (!isInfinityMode) {
+            for (const obs of obstacles) {
+                if (Math.sqrt((x-obs.x)**2 + (z-obs.z)**2) < obs.radius + 1.0) { valid = false; break; }
+            }
+        }
+        if (Math.sqrt((x - golfState.pos.x)**2 + (z - golfState.pos.z)**2) < 4) valid = false;
+        tries++;
+    }
+    
+    const fY = getElevation(x, z + 0.5);
+    const bY = getElevation(x, z - 0.5);
+    const rY = getElevation(x + 0.5, z);
+    const lY = getElevation(x - 0.5, z);
+    golfHoleGroup.rotation.order = 'YXZ';
+    golfHoleGroup.rotation.x = -Math.atan2(fY - bY, 1.0);
+    golfHoleGroup.rotation.z = Math.atan2(rY - lY, 1.0);
+    golfHoleGroup.position.set(x, getElevation(x, z) + 0.02, z);
+}
+
+function hitGolfBall() {
+    golfState.charging = false;
+    golfState.strokes++;
+    const force = golfState.power * GOLF_POWER_SCALE; 
+    golfState.vel.x = Math.sin(golfState.aimYaw) * force;
+    golfState.vel.z = Math.cos(golfState.aimYaw) * force;
+    golfState.vel.y = force * GOLF_POWER_LIFT + 2;   
+    golfState.power = 0;
+    document.getElementById('golf-power-bar').style.width = '0%';
+    golfClubGroup.rotation.x = -Math.PI / 2;
+    setTimeout(() => { golfClubPivot.visible = false; }, 200);
+    spawnParticles(golfState.pos.x, golfState.pos.z, 0xffffff, 5, 1);
+}
+
+function updateGolf(deltaTime) {
+    if (!golfState.active) return;
+    const groundY   = getElevation(golfState.pos.x, golfState.pos.z);
+    const isResting = golfState.vel.lengthSq() < 0.1 && golfState.pos.y <= groundY + golfState.radius + 0.1;
+
+    if (isResting) {
+        golfState.vel.set(0, 0, 0);
+        golfClubPivot.visible = true; aimMesh.visible = true;
+        if (!golfState.charging) golfState.aimYaw = camYaw;
+        golfClubPivot.position.copy(golfState.pos); golfClubPivot.rotation.y = golfState.aimYaw;
+        aimMesh.position.copy(golfState.pos); aimMesh.position.y = groundY + 0.1; aimMesh.rotation.y = golfState.aimYaw;
+        if (golfState.charging) {
+            golfState.power += 150 * golfState.chargeDir * deltaTime;
+            if (golfState.power >= 100) { golfState.power = 100; golfState.chargeDir = -1; }
+            if (golfState.power <=   0) { golfState.power =   0; golfState.chargeDir =  1; }
+            golfClubGroup.rotation.x = (golfState.power / 100) * (Math.PI / 2.5);
+            document.getElementById('golf-power-bar').style.width = `${golfState.power}%`;
+        } else { golfClubGroup.rotation.x = 0; }
+    } else {
+        golfClubPivot.visible = false; aimMesh.visible = false;
+        golfState.vel.y -= 20 * deltaTime;
+        golfState.pos.addScaledVector(golfState.vel, deltaTime);
+        let friction = 0.98;
+        if (!isInfinityMode) {
+            const hY  = YARD_SIZE / 2;
+            const col = Math.floor((golfState.pos.x + hY) / GRASS_STEP);
+            const row = Math.floor((golfState.pos.z + hY) / GRASS_STEP);
+            if (col >= 0 && col < GRASS_GRID_SIZE && row >= 0 && row < GRASS_GRID_SIZE) {
+                if (yardGrassStates[row * GRASS_GRID_SIZE + col] === 0 && golfState.pos.y < groundY + 0.5) {
+                    friction = 0.90;
+                    if (Math.random() < 0.1) spawnParticles(golfState.pos.x, golfState.pos.z, 0x4CAF50, 1, 0.5);
+                }
+            }
+        }
+        golfState.vel.x *= friction; golfState.vel.z *= friction;
+        if (golfState.pos.y - golfState.radius < groundY) { golfState.pos.y = groundY + golfState.radius; golfState.vel.y *= -0.5; }
+        for (const obs of obstacles) {
+            const dx = golfState.pos.x - obs.x, dz = golfState.pos.z - obs.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist < obs.radius + golfState.radius && golfState.pos.y < getElevation(obs.x, obs.z) + 1.5) {
+                const ov = (obs.radius + golfState.radius) - dist;
+                golfState.pos.x += (dx/dist)*ov; golfState.pos.z += (dz/dist)*ov;
+                golfState.vel.x *= -0.7; golfState.vel.z *= -0.7;
+            }
+        }
+        if (!isInfinityMode) {
+            const limit = YARD_SIZE/2 - golfState.radius;
+            if (golfState.pos.x >  limit) { golfState.pos.x =  limit; golfState.vel.x *= -0.8; }
+            if (golfState.pos.x < -limit) { golfState.pos.x = -limit; golfState.vel.x *= -0.8; }
+            if (golfState.pos.z >  limit) { golfState.pos.z =  limit; golfState.vel.z *= -0.8; }
+            if (golfState.pos.z < -limit) { golfState.pos.z = -limit; golfState.vel.z *= -0.8; }
+        }
+        const hdx = golfState.pos.x - golfHoleGroup.position.x;
+        const hdz = golfState.pos.z - golfHoleGroup.position.z;
+        if (hdx*hdx + hdz*hdz < GOLF_HOLE_RADIUS * GOLF_HOLE_RADIUS && golfState.vel.lengthSq() < 25) {
+            golfState.vel.set(0, 0, 0);
+            golfState.pos.x = golfHoleGroup.position.x; golfState.pos.z = golfHoleGroup.position.z;
+            golfState.active = false;
+            showNotification('NICE SHOT!', `+50 Coins  (Strokes: ${golfState.strokes})`, 3000);
+            addCoins(50); spawnParticles(golfState.pos.x, golfState.pos.z, 0xFFD700, 20, 2);
+            setTimeout(() => {
+                spawnGolfHole();
+                golfState.pos.y = getElevation(golfState.pos.x, golfState.pos.z) + 2;
+                golfState.active = true; golfState.strokes = 0;
+            }, 3000);
+        }
+    }
+    golfBallMesh.position.copy(golfState.pos);
+    document.getElementById('golf-strokes').innerText = `Strokes: ${golfState.strokes}`;
+    if (golfLight && golfLight.target) {
+        golfLight.position.set(golfState.pos.x, golfState.pos.y + 1.5, golfState.pos.z);
+        const lightYaw = (golfState.charging || golfState.vel.lengthSq() < 0.1) ? golfState.aimYaw : golfState.aimYaw;
+        golfLight.target.position.set(golfState.pos.x + Math.sin(lightYaw)*5, golfState.pos.y, golfState.pos.z + Math.cos(lightYaw)*5);
+    }
+}
+
+// DARTS MECHANICS
+function spawnDartTarget() {
+    let x, z, tries = 0, valid = false;
+    const bounds = isInfinityMode ? 25 : (YARD_SIZE / 2 - 4);
+    while (!valid && tries < 100) {
+        if (isInfinityMode) {
+            x = mowerGroup.position.x + (Math.random() - 0.5) * bounds * 2;
+            z = mowerGroup.position.z + (Math.random() - 0.5) * bounds * 2;
+        } else {
+            x = (Math.random() - 0.5) * (YARD_SIZE - 4);
+            z = (Math.random() - 0.5) * (YARD_SIZE - 4);
+        }
+        valid = true;
+        if (!isInfinityMode) {
+            for (const obs of obstacles) {
+                if (Math.sqrt((x-obs.x)**2 + (z-obs.z)**2) < obs.radius + 1.5) { valid = false; break; }
+            }
+        }
+        if (Math.sqrt((x - dartsState.pos.x)**2 + (z - dartsState.pos.z)**2) < 5) valid = false; 
+        tries++;
+    }
+    dartTargetGroup.position.set(x, getElevation(x, z) + 0.85, z);
+}
+
+function throwDart() {
+    dartsState.charging = false;
+    const force = dartsState.power * 0.15; 
+    dartsState.vel.x = Math.sin(dartsState.aimYaw) * force;
+    dartsState.vel.z = Math.cos(dartsState.aimYaw) * force;
+    dartsState.vel.y = force * 0.4 + 8; 
+    dartsState.power = 0;
+    document.getElementById('darts-power-bar').style.width = '0%';
+    dartsState.state = 'flying';
+    spawnParticles(dartsState.pos.x, dartsState.pos.z, 0xffffff, 5, 1);
+}
+
+function updateDarts(deltaTime) {
+    if (!dartsState.active) return;
+    const groundY = getElevation(dartsState.pos.x, dartsState.pos.z);
+    
+    if (dartsState.state === 'idle') {
+        aimMeshDarts.visible = true;
+        if (!dartsState.charging) dartsState.aimYaw = camYaw;
+        aimMeshDarts.position.copy(dartsState.pos); 
+        aimMeshDarts.position.y = groundY + 0.1; 
+        aimMeshDarts.rotation.y = dartsState.aimYaw;
+        
+        const idleDir = new THREE.Vector3(Math.sin(dartsState.aimYaw), 0.5, Math.cos(dartsState.aimYaw)).normalize();
+        dartMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), idleDir);
+        
+        if (dartsState.charging) {
+            dartsState.power += 150 * dartsState.chargeDir * deltaTime;
+            if (dartsState.power >= 100) { dartsState.power = 100; dartsState.chargeDir = -1; }
+            if (dartsState.power <=   0) { dartsState.power =   0; dartsState.chargeDir =  1; }
+            document.getElementById('darts-power-bar').style.width = `${dartsState.power}%`;
+            dartMesh.rotateX(Math.sin(performance.now()*0.05)*0.05); 
+        }
+    } else if (dartsState.state === 'flying') {
+        aimMeshDarts.visible = false;
+        
+        if (Math.abs(dartsState.pos.x) > 21 || Math.abs(dartsState.pos.z) > 21) {
+            showNotification('OUT OF BOUNDS!', 'Dart flew over the fence!', 2000);
+            dartsState.state = 'idle';
+            dartsState.pos.y = getElevation(dartsState.pos.x, dartsState.pos.z) + 2;
+            dartsState.vel.set(0,0,0);
+            return;
+        }
+
+        dartsState.vel.y -= 25 * deltaTime; 
+        dartsState.pos.addScaledVector(dartsState.vel, deltaTime);
+        
+        if (dartsState.vel.lengthSq() > 0.1) {
+            dartMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dartsState.vel.clone().normalize());
+        }
+
+        if (dartsState.pos.y <= groundY + 0.1 && dartsState.vel.y < 0) {
+            dartsState.pos.y = groundY + 0.1;
+            dartsState.vel.set(0,0,0);
+            dartsState.state = 'stuck';
+            spawnParticles(dartsState.pos.x, dartsState.pos.z, 0x5C4033, 15, 1.5);
+            
+            const dx = dartsState.pos.x - dartTargetGroup.position.x;
+            const dz = dartsState.pos.z - dartTargetGroup.position.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            
+            let points = 0;
+            if (dist < 0.4) points = 100;
+            else if (dist < 1.0) points = 50;
+            else if (dist < 1.8) points = 10;
+            
+            if (points > 0) {
+                dartsState.score += points;
+                showNotification(points === 100 ? 'BULLSEYE!' : 'NICE HIT!', `+${points} Coins`, 3000);
+                addCoins(points);
+                spawnParticles(dartsState.pos.x, dartsState.pos.z, points===100 ? 0xff0000 : 0xffffff, 30, 2);
+            } else {
+                showNotification('MISS!', 'Try again.', 2000);
+            }
+            document.getElementById('darts-score').innerText = `Score: ${dartsState.score}`;
+
+            setTimeout(() => {
+                dartsState.pos.y = getElevation(dartsState.pos.x, dartsState.pos.z) + 2;
+                dartsState.state = 'idle';
+                if (points > 0) spawnDartTarget();
+            }, 2500);
+        }
+    }
+    
+    dartMesh.position.copy(dartsState.pos);
+    
+    if (dartLight && dartLight.target) {
+        dartLight.position.set(dartsState.pos.x, Math.max(dartsState.pos.y + 2, groundY + 3), dartsState.pos.z);
+        const lightYaw = (dartsState.state === 'idle') ? dartsState.aimYaw : Math.atan2(dartsState.vel.x, dartsState.vel.z);
+        dartLight.target.position.set(dartsState.pos.x + Math.sin(lightYaw)*5, groundY, dartsState.pos.z + Math.cos(lightYaw)*5);
+    }
+}
+
+// BASKETBALL MECHANICS
+function throwBasketball() {
+    bballState.charging = false;
+    const force = bballState.power * 0.18 + 6; 
+    bballState.vel.x = Math.sin(bballState.aimYaw) * force;
+    bballState.vel.z = Math.cos(bballState.aimYaw) * force;
+    bballState.vel.y = bballState.power * 0.12 + 10; 
+    bballState.power = 0;
+    document.getElementById('bball-power-bar').style.width = '0%';
+    bballState.state = 'flying';
+    spawnParticles(bballState.pos.x, bballState.pos.z, 0xffffff, 5, 1);
+}
+
+function updateBasketball(deltaTime) {
+    if (!bballState.active) return;
+    const groundY = getElevation(bballState.pos.x, bballState.pos.z);
+
+    if (bballState.state === 'idle') {
+        aimMeshBball.visible = true;
+        if (!bballState.charging) bballState.aimYaw = camYaw;
+        bballState.pos.copy(mowerGroup.position);
+        bballState.pos.y = groundY + 2;
+
+        aimMeshBball.position.copy(bballState.pos);
+        aimMeshBball.position.y = groundY + 0.1;
+        aimMeshBball.rotation.y = bballState.aimYaw;
+
+        if (bballState.charging) {
+            bballState.power += 150 * bballState.chargeDir * deltaTime;
+            if (bballState.power >= 100) { bballState.power = 100; bballState.chargeDir = -1; }
+            if (bballState.power <= 0) { bballState.power = 0; bballState.chargeDir = 1; }
+            document.getElementById('bball-power-bar').style.width = `${bballState.power}%`;
+        }
+    } else if (bballState.state === 'flying' || bballState.state === 'bouncing') {
+        aimMeshBball.visible = false;
+        
+        if (Math.abs(bballState.pos.x) > 21 || bballState.pos.z > 21 || bballState.pos.z < -32) {
+            showNotification('OUT OF BOUNDS!', 'Ball lost over the fence!', 2000);
+            bballState.state = 'idle';
+            bballState.pos.y = getElevation(bballState.pos.x, bballState.pos.z) + 2;
+            bballState.vel.set(0,0,0);
+            return;
+        }
+
+        bballState.prevY = bballState.pos.y;
+        bballState.vel.y -= 30 * deltaTime; 
+        bballState.pos.addScaledVector(bballState.vel, deltaTime);
+
+        if (bballState.vel.lengthSq() > 0.1) {
+            const speed = bballState.vel.length();
+            _ballRotAxis.set(bballState.vel.z, 0, -bballState.vel.x).normalize();
+            basketballMesh.rotateOnWorldAxis(_ballRotAxis, speed*deltaTime);
+        }
+
+        const hoopZ = -12; // Adjusted freestanding backboard coordinate
+        const hoopCenterZ = hoopZ + 1.0; 
+        
+        // Backboard bounce
+        if (bballState.pos.z < hoopZ + 0.5 && bballState.pos.z > hoopZ - 0.5 && Math.abs(bballState.pos.x) < 1.5 && bballState.pos.y > 7 && bballState.pos.y < 9) {
+            bballState.pos.z = hoopZ + 0.5;
+            bballState.vel.z *= -0.7;
+            bballState.vel.x *= 0.8;
+            bballState.vel.y *= 0.8;
+            spawnParticles(bballState.pos.x, bballState.pos.z, 0xffffff, 3, 0.5);
+        } else if (bballState.pos.z < -20.5 && bballState.pos.z > -31 && Math.abs(bballState.pos.x) < 7.5 && bballState.pos.y < 16) {
+            // House wall bounce
+            if (bballState.vel.z < 0 && bballState.pos.z > -21.5) {
+                bballState.pos.z = -20.5;
+                bballState.vel.z *= -0.7;
+            } else { 
+                bballState.vel.x *= -0.7;
+                bballState.vel.z *= -0.7;
+            }
+            spawnParticles(bballState.pos.x, bballState.pos.z, 0xffffff, 3, 0.5);
+        }
+        
+        // Fence bounds bounce
+        const fenceLimit = YARD_SIZE/2 - 0.4;
+        if (bballState.pos.y < groundY + 7) {
+            if (bballState.pos.x > fenceLimit) { bballState.pos.x = fenceLimit; bballState.vel.x *= -0.7; }
+            if (bballState.pos.x < -fenceLimit) { bballState.pos.x = -fenceLimit; bballState.vel.x *= -0.7; }
+            if (bballState.pos.z > fenceLimit) { bballState.pos.z = fenceLimit; bballState.vel.z *= -0.7; }
+        }
+
+        // Obstacle bounce
+        for (const obs of obstacles) {
+            const dx = bballState.pos.x - obs.x;
+            const dz = bballState.pos.z - obs.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist < obs.radius + 0.4 && bballState.pos.y < getElevation(obs.x, obs.z) + 1.5) {
+                const ov = (obs.radius + 0.4) - dist;
+                bballState.pos.x += (dx/dist)*ov; bballState.pos.z += (dz/dist)*ov;
+                bballState.vel.x *= -0.7; bballState.vel.z *= -0.7;
+                spawnParticles(bballState.pos.x, bballState.pos.z, 0x888888, 3, 0.5);
+            }
+        }
+
+        // Hoop score Check
+        if (bballState.prevY > 7.5 && bballState.pos.y <= 7.5) {
+            const distToCenter = Math.hypot(bballState.pos.x, bballState.pos.z - hoopCenterZ);
+            if (distToCenter < 0.9) {
+                bballState.score += 3;
+                showNotification('SWISH!', '+3 Points', 2000);
+                addCoins(15);
+                spawnParticles(bballState.pos.x, bballState.pos.z, 0xffa500, 20, 2);
+                document.getElementById('bball-score').innerText = `Score: ${bballState.score}`;
+            }
+        }
+
+        // Rim bounce
+        const distToHoopCenterXY = Math.hypot(bballState.pos.x, bballState.pos.z - hoopCenterZ);
+        if (Math.abs(bballState.pos.y - 7.5) < 0.4 && distToHoopCenterXY > 0.8 && distToHoopCenterXY < 1.4) {
+            const pushVec = new THREE.Vector2(bballState.pos.x, bballState.pos.z - hoopCenterZ).normalize();
+            bballState.vel.x += pushVec.x * 5;
+            bballState.vel.z += pushVec.y * 5;
+            bballState.vel.y *= -0.5;
+            bballState.vel.y += 5;
+            spawnParticles(bballState.pos.x, bballState.pos.z, 0xff5500, 5, 0.5);
+        }
+
+        // Floor bounce
+        if (bballState.pos.y - 0.4 <= groundY) {
+            bballState.pos.y = groundY + 0.4;
+            bballState.vel.y *= -0.75; 
+            bballState.vel.x *= 0.8;
+            bballState.vel.z *= 0.8;
+            bballState.state = 'bouncing';
+            if (Math.abs(bballState.vel.y) > 2) {
+                spawnParticles(bballState.pos.x, bballState.pos.z, 0x5C4033, 5, 0.5);
+            }
+        }
+
+        if (bballState.state === 'bouncing' && bballState.vel.lengthSq() < 1.0 && bballState.pos.y - 0.4 <= groundY + 0.1) {
+            bballState.state = 'idle';
+            bballState.vel.set(0,0,0);
+        }
+    }
+    basketballMesh.position.copy(bballState.pos);
+}
+
+// DETECTOR MECHANICS
+function updateDetector(deltaTime) {
+    if (keys.forward) detectorState.speed += 15 * deltaTime;
+    else if (keys.backward) detectorState.speed -= 15 * deltaTime;
+    else {
+        if (detectorState.speed > 0) detectorState.speed = Math.max(0, detectorState.speed - 20 * deltaTime);
+        else detectorState.speed = Math.min(0, detectorState.speed + 20 * deltaTime);
+    }
+    detectorState.speed = THREE.MathUtils.clamp(detectorState.speed, -4, 4);
+
+    if (Math.abs(detectorState.speed) > 0.1) {
+        const dir = detectorState.speed > 0 ? 1 : -1;
+        if (keys.left) detectorState.heading += 3 * dir * deltaTime;
+        if (keys.right) detectorState.heading -= 3 * dir * deltaTime;
+    }
+
+    detectorGroup.rotation.y = detectorState.heading;
+    let nextX = detectorState.pos.x + Math.sin(detectorState.heading) * detectorState.speed * deltaTime;
+    let nextZ = detectorState.pos.z + Math.cos(detectorState.heading) * detectorState.speed * deltaTime;
+
+    if (!isInfinityMode) {
+        for (const obs of obstacles) {
+            const dx = nextX - obs.x, dz = nextZ - obs.z, dist = Math.sqrt(dx*dx + dz*dz);
+            const minD = obs.radius + 0.3;
+            if (dist < minD && dist > 0.001) { const ov = minD - dist; nextX += (dx/dist)*ov; nextZ += (dz/dist)*ov; detectorState.speed *= 0.5; }
+        }
+        const bound = YARD_SIZE/2 - 0.3;
+        detectorState.pos.x = THREE.MathUtils.clamp(nextX, -bound, bound);
+        detectorState.pos.z = THREE.MathUtils.clamp(nextZ, -bound, bound);
+    } else {
+        detectorState.pos.x = nextX || 0;
+        detectorState.pos.z = nextZ || 0;
+    }
+    
+    const baseY = getElevation(detectorState.pos.x, detectorState.pos.z);
+    detectorState.pos.y = baseY;
+    detectorGroup.position.copy(detectorState.pos);
+
+    const coilX = detectorState.pos.x + Math.sin(detectorState.heading) * 1.2;
+    const coilZ = detectorState.pos.z + Math.cos(detectorState.heading) * 1.2;
+    const coilY = getElevation(coilX, coilZ);
+    const pitch = Math.atan2(coilY - baseY, 1.2);
+    detectorMesh.rotation.order = 'YXZ';
+    detectorMesh.rotation.x = -pitch;
+
+    if (Math.abs(detectorState.speed) > 0.1) {
+        detectorMesh.rotation.y = Math.sin(performance.now() * 0.005) * 0.6;
+    } else {
+        detectorMesh.rotation.y *= 0.9;
+    }
+
+    currentClosestDist = Infinity;
+    currentClosestTreasure = null;
+
+    if (isInfinityMode) {
+        const cx = Math.floor(detectorState.pos.x / GRASS_STEP);
+        const cz = Math.floor(detectorState.pos.z / GRASS_STEP);
+        for (let r = -15; r <= 15; r++) {
+            for (let c = -15; c <= 15; c++) {
+                const wx = cx + c, wz = cz + r;
+                const k = cellKey(wx, wz);
+                if (worldTreasureMap.get(k)) continue;
+                const h = deterministicHash(wx + 555, wz + 555);
+                if (h < 0.005) { 
+                    const tx = wx * GRASS_STEP;
+                    const tz = wz * GRASS_STEP;
+                    const dist = Math.hypot(tx - detectorState.pos.x, tz - detectorState.pos.z);
+                    if (dist < currentClosestDist) {
+                        currentClosestDist = dist;
+                        currentClosestTreasure = { x: tx, z: tz, k: k, isInf: true, h: h };
+                    }
+                }
+            }
+        }
+    } else {
+        for (const t of buriedTreasures) {
+            if (t.found) continue;
+            const dist = Math.hypot(t.x - detectorState.pos.x, t.z - detectorState.pos.z);
+            if (dist < currentClosestDist) { currentClosestDist = dist; currentClosestTreasure = t; }
+        }
+    }
+
+    const signalBar = document.getElementById('detector-signal-bar');
+    const statusText = document.getElementById('detector-status');
+    if (currentClosestDist < 8.0) {
+        const pct = Math.max(0, (8.0 - currentClosestDist) / 8.0) * 100;
+        signalBar.style.width = `${pct}%`;
+        if (currentClosestDist < 1.5) {
+            statusText.innerText = "PRESS SPACE TO DIG!";
+            statusText.classList.add('text-green-400');
+        } else {
+            statusText.innerText = "SIGNAL DETECTED...";
+            statusText.classList.remove('text-green-400');
+        }
+        
+        detectorBeepTimer -= deltaTime;
+        if (detectorBeepTimer <= 0) {
+            playDetectorBeep(currentClosestDist);
+            const beepInterval = Math.max(0.1, ((currentClosestDist - 1.5) / 6.5) * 0.9 + 0.1);
+            detectorBeepTimer = beepInterval;
+        }
+    } else {
+        signalBar.style.width = '0%';
+        statusText.innerText = "SEARCHING...";
+        statusText.classList.remove('text-green-400');
+        detectorBeepTimer = 0;
+    }
+
+    if (detectorLight && detectorLight.target) {
+        detectorLight.target.position.set(detectorState.pos.x + Math.sin(detectorState.heading)*2, detectorState.pos.y, detectorState.pos.z + Math.cos(detectorState.heading)*2);
+    }
+}
+
+function playDetectorBeep(dist) {
+    if (!audioCtx || audioCtx.state === 'suspended') return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    const freq = Math.max(600, 1200 - ((Math.max(1.5, dist) - 1.5) / 6.5) * 600);
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.start();
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+    osc.stop(audioCtx.currentTime + 0.1);
+}
+
+function digTreasure() {
+    if (!isDetectorMode || !currentClosestTreasure || currentClosestDist >= 1.5) return;
+
+    let val = 0;
+    let name = '';
+
+    if (currentClosestTreasure.isInf) {
+        worldTreasureMap.set(currentClosestTreasure.k, true);
+        if (currentClosestTreasure.h < 0.0005) { name = 'Diamond Ring'; val = 100; }
+        else if (currentClosestTreasure.h < 0.002) { name = 'Time Capsule'; val = 50; }
+        else if (currentClosestTreasure.h < 0.0035) { name = 'Silver Coin'; val = 25; }
+        else { name = 'Rusty Horseshoe'; val = 15; }
+    } else {
+        currentClosestTreasure.found = true;
+        name = currentClosestTreasure.name;
+        val = currentClosestTreasure.val;
+    }
+
+    spawnParticles(currentClosestTreasure.x, currentClosestTreasure.z, 0x5C4033, 30, 1.5); 
+    setTimeout(() => spawnParticles(currentClosestTreasure.x, currentClosestTreasure.z, 0xFFD700, 20, 2), 200); 
+
+    showNotification('TREASURE FOUND!', `${name} (+${val} Coins)`, 3000);
+    addCoins(val);
+}
+
+// =============================================================================
+// RC CAR MECHANICS
+// =============================================================================
+function updateRcCar(deltaTime) {
+    if (keys.forward) rcState.speed += 25 * deltaTime;
+    else if (keys.backward) rcState.speed -= 25 * deltaTime;
+    else rcState.speed *= 0.9;
+    
+    rcState.speed = THREE.MathUtils.clamp(rcState.speed, -15, 15);
+
+    if (Math.abs(rcState.speed) > 0.1) {
+        const dir = rcState.speed > 0 ? 1 : -1;
+        if (keys.left) rcState.heading += 4 * dir * deltaTime;
+        if (keys.right) rcState.heading -= 4 * dir * deltaTime;
+    }
+
+    rcGroup.rotation.y = rcState.heading;
+
+    let nextX = rcState.pos.x + Math.sin(rcState.heading) * rcState.speed * deltaTime;
+    let nextZ = rcState.pos.z + Math.cos(rcState.heading) * rcState.speed * deltaTime;
+
+    if (!isInfinityMode) {
+        const bound = YARD_SIZE/2 - 0.2;
+        const fenceY = 7;
+        const houseZ = -20.5;
+
+        // OOB check (went over the fence)
+        if (Math.abs(rcState.pos.x) > 21 || rcState.pos.z > 21 || rcState.pos.z < -32) {
+            showNotification('OUT OF BOUNDS', 'RC Car Reset', 1500);
+            rcState.pos.set(0, getRcElevationWithJumps(0,0) + 1.0, 0);
+            rcState.vel.set(0,0,0);
+            rcState.speed = 0;
+            rcState.isAirborne = false;
+            return;
+        }
+
+        // Bounce off Fences
+        if (nextX < -bound && rcState.pos.y < getRcElevationWithJumps(-bound, nextZ) + fenceY) { nextX = -bound; rcState.speed *= -0.5; }
+        if (nextX > bound && rcState.pos.y < getRcElevationWithJumps(bound, nextZ) + fenceY) { nextX = bound; rcState.speed *= -0.5; }
+        if (nextZ > bound && rcState.pos.y < getRcElevationWithJumps(nextX, bound) + fenceY) { nextZ = bound; rcState.speed *= -0.5; }
+        if (nextZ < -bound && rcState.pos.y < getRcElevationWithJumps(nextX, -bound) + fenceY) { 
+            if (Math.abs(nextX) >= 7.5) { // Ensure it's outside the house bounds footprint
+                nextZ = -bound; rcState.speed *= -0.5; 
+            }
+        }
+        
+        // Bounce off House
+        if (nextZ < houseZ && nextZ > -31 && Math.abs(nextX) < 7.5 && rcState.pos.y < getRcElevationWithJumps(nextX, nextZ) + 16) {
+            if (rcState.pos.z >= houseZ) {
+                nextZ = houseZ; rcState.speed *= -0.5;
+            } else {
+                nextX = rcState.pos.x; nextZ = rcState.pos.z; rcState.speed *= -0.5;
+            }
+        }
+
+        for (const obs of obstacles) {
+            if (Math.hypot(nextX - obs.x, nextZ - obs.z) < obs.radius + 0.15 && rcState.pos.y < getElevation(obs.x, obs.z) + 1.0) {
+                rcState.speed *= -0.5; 
+                nextX = rcState.pos.x; nextZ = rcState.pos.z;
+            }
+        }
+    }
+
+    const currentGround = getRcElevationWithJumps(rcState.pos.x, rcState.pos.z);
+    const nextGround = getRcElevationWithJumps(nextX, nextZ);
+
+    if (!rcState.isAirborne) {
+        rcState.pos.x = nextX;
+        rcState.pos.z = nextZ;
+
+        if (nextGround - currentGround > 0.15 && Math.abs(rcState.speed) > 5) {
+            rcState.vel.y = (nextGround - currentGround) * Math.abs(rcState.speed) * 1.5;
+            rcState.isAirborne = true;
+            spawnParticles(rcState.pos.x, rcState.pos.z, 0xffffff, 3, 0.5);
+        } else if (currentGround - nextGround > 0.3 && Math.abs(rcState.speed) > 5) {
+            rcState.vel.y = Math.abs(rcState.speed) * 0.4;
+            rcState.isAirborne = true;
+        } else if (nextGround - currentGround > 0.35) {
+            rcState.speed *= -0.2;
+            rcState.pos.x -= Math.sin(rcState.heading) * 0.2;
+            rcState.pos.z -= Math.cos(rcState.heading) * 0.2;
+        } else {
+            rcState.pos.y = nextGround + 0.05; 
+        }
+    } else {
+        rcState.pos.x = nextX;
+        rcState.pos.z = nextZ;
+    }
+
+    if (rcState.isAirborne) {
+        rcState.vel.y -= 25 * deltaTime; 
+        rcState.pos.y += rcState.vel.y * deltaTime;
+        if (rcState.pos.y <= nextGround + 0.05) {
+            rcState.pos.y = nextGround + 0.05;
+            rcState.vel.y = 0;
+            rcState.isAirborne = false;
+            spawnParticles(rcState.pos.x, rcState.pos.z, 0x5C4033, 4, 0.5);
+        }
+    }
+
+    rcGroup.position.copy(rcState.pos);
+
+    if (!rcState.isAirborne) {
+        const h = rcState.heading;
+        const fY = getRcElevationWithJumps(rcState.pos.x + Math.sin(h)*0.2, rcState.pos.z + Math.cos(h)*0.2);
+        const bY = getRcElevationWithJumps(rcState.pos.x - Math.sin(h)*0.2, rcState.pos.z - Math.cos(h)*0.2);
+        rcMesh.rotation.x = -Math.atan2(fY - bY, 0.4);
+    } else {
+        rcMesh.rotation.x *= 0.95; 
+    }
+
+    if (rcRingGroup && rcRingGroup.visible) {
+        rcRingGroup.rotation.y += deltaTime * 2;
+        if (rcGroup.position.distanceTo(rcRingGroup.position) < 0.8) {
+            spawnParticles(rcRingGroup.position.x, rcRingGroup.position.z, 0xffd700, 20, 2);
+            addCoins(25);
+            spawnRcRing();
+            showNotification('RING CLEARED!', '+25 Coins', 1500);
+        }
+    }
+}
+
+// =============================================================================
+// SHOP
+// =============================================================================
+function toggleShop() {
+    isShopOpen = !isShopOpen;
+    const modal = document.getElementById('shop-modal');
+    if (isShopOpen) {
+        keys.forward = keys.backward = keys.left = keys.right = keys.water = false;
+        modal.classList.remove('hidden');
+        updateShopUI();
+    } else {
+        modal.classList.add('hidden');
+    }
+}
+
+function getUpgradeCost(type) { return Math.floor(upgrades[type].baseCost * Math.pow(upgrades[type].costMult, upgrades[type].level - (type==='hover'?0:1))); }
+
+function renderUpgradeButton(type) {
+    const upg  = upgrades[type], cost = getUpgradeCost(type);
+    const btn  = document.getElementById(`btn-upg-${type}`);
+    const lvl  = document.getElementById(`${type}-lvl`);
+    const BASE = 'upgrade-btn text-white font-bold py-2 px-4 rounded-lg shadow transition';
+    if (upg.level >= upg.max) {
+        lvl.innerText = 'Level MAX'; btn.innerText = 'MAXED'; btn.disabled = true;
+        btn.className = `${BASE} bg-gray-400 cursor-not-allowed`;
+    } else {
+        lvl.innerText = `Level ${upg.level}/${upg.max}`; btn.innerText = `🪙 ${cost}`;
+        const canAfford = coins >= cost; btn.disabled = !canAfford;
+        btn.className = `${BASE} ${canAfford ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-400 opacity-50 cursor-not-allowed'}`;
+    }
+}
+
+function updateShopUI() { 
+    document.getElementById('shop-coins').innerText = `🪙 ${coins}`; 
+    ['deck','engine','tires','lights', 'hover'].forEach(renderUpgradeButton); 
+}
+
+function buyUpgrade(type) {
+    const cost = getUpgradeCost(type), upg = upgrades[type];
+    if (coins < cost || upg.level >= upg.max) return;
+    coins -= cost; upg.level++; applyUpgradeEffects();
+    document.getElementById('coin-text').innerText = `🪙 ${coins}`;
+    updateShopUI(); saveProgress();
+}
+
+function addCoins(amount) {
+    coins += amount;
+    document.getElementById('coin-text').innerText = `🪙 ${coins}`;
+    const el = document.getElementById('coin-text');
+    el.style.transform = 'scale(1.3)'; setTimeout(() => { el.style.transform = 'scale(1)'; }, 150);
+}
+
+function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+// =============================================================================
+// PHYSICS / SYSTEMS
+// =============================================================================
+let particleIndex = 0;
+
+function spawnParticles(x, z, colorHex, count, velocityScale = 1) {
+    const groundY = getElevation(x, z);
+    _tempColor.set(colorHex); 
+    for (let i = 0; i < count; i++) {
+        const p = particlesData[particleIndex];
+        const wasActive = p.active;
+        p.active = true;
+        p.pos.set(x + (Math.random()-0.5)*0.5, groundY + 0.4, z + (Math.random()-0.5)*0.5);
+        p.vel.set((Math.random()-0.5)*4*velocityScale, (2+Math.random()*3)*velocityScale, (Math.random()-0.5)*4*velocityScale);
+        p.life = p.maxLife = 0.4 + Math.random()*0.4;
+        particleMesh.setColorAt(particleIndex, _tempColor);
+        if (!wasActive) activeParticleCount++;
+        particleIndex = (particleIndex + 1) % MAX_PARTICLES;
+    }
+    if (particleMesh.instanceColor) particleMesh.instanceColor.needsUpdate = true;
+}
+
+const tempMatrix    = new THREE.Matrix4();
+const tempPosition  = new THREE.Vector3();
+const tempScale     = new THREE.Vector3();
+const tempQuaternion = new THREE.Quaternion();
+
+function updateParticles(deltaTime) {
+    if (activeParticleCount === 0) return;
+    let updated = false;
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+        const p = particlesData[i]; if (!p.active) continue;
+        p.life -= deltaTime;
+        if (p.life <= 0) {
+            p.active = false; activeParticleCount--;
+            particleMesh.setMatrixAt(i, tempMatrix.makeScale(0, 0, 0));
+        } else {
+            p.pos.addScaledVector(p.vel, deltaTime); p.vel.y -= 9.8 * deltaTime;
+            const gY = getElevation(p.pos.x, p.pos.z);
+            if (p.pos.y < gY + 0.05) { p.pos.y = gY + 0.05; p.vel.y *= -0.3; p.vel.x *= 0.6; p.vel.z *= 0.6; }
+            const s = p.life / p.maxLife;
+            tempPosition.copy(p.pos); tempQuaternion.identity(); tempScale.set(s, s, s);
+            tempMatrix.compose(tempPosition, tempQuaternion, tempScale); particleMesh.setMatrixAt(i, tempMatrix);
+        }
+        updated = true;
+    }
+    if (updated) particleMesh.instanceMatrix.needsUpdate = true;
+}
+
+function updateBugs(deltaTime, time) {
+    const mx = mowerGroup.position.x, mz = mowerGroup.position.z;
+    const bugSpeed = isNightTime ? 0.3 : 1.0;
+    for (let i = 0; i < NUM_BUGS; i++) {
+        const b = bugsData[i];
+        if (isInfinityMode && Math.hypot(b.home.x - mowerGroup.position.x, b.home.z - mowerGroup.position.z) > 60) {
+            b.home.x = mowerGroup.position.x + (Math.random()-0.5)*80;
+            b.home.z = mowerGroup.position.z + (Math.random()-0.5)*80;
+            b.pos.copy(b.home);
+        }
+        const dx = b.pos.x - mx, dz = b.pos.z - mz;
+        const distSq = dx*dx + dz*dz;
+        if (distSq < 25 && !isShopOpen && !isGolfMode && !isDartsMode && !isDetectorMode && !isRcMode) {
+            const dist = Math.sqrt(distSq);
+            b.vel.x += (dx/dist)*5*deltaTime; b.vel.z += (dz/dist)*5*deltaTime; b.vel.y += 2*deltaTime;
+        } else {
+            b.home.y = getElevation(b.home.x, b.home.z) + b.offsetY;
+            b.vel.x += (b.home.x - b.pos.x)*0.2*bugSpeed*deltaTime + (Math.random()-0.5)*2*bugSpeed*deltaTime;
+            b.vel.z += (b.home.z - b.pos.z)*0.2*bugSpeed*deltaTime + (Math.random()-0.5)*2*bugSpeed*deltaTime;
+            b.vel.y += ((b.home.y - b.pos.y)*2 + (Math.random()-0.5))*deltaTime;
+        }
+        b.vel.multiplyScalar(0.92); b.pos.addScaledVector(b.vel, deltaTime);
+        tempPosition.copy(b.pos);
+        if (b.vel.lengthSq() > 0.01) tempQuaternion.setFromAxisAngle(_bugUpAxis, Math.atan2(b.vel.x, b.vel.z));
+        const flap = 1 + Math.sin(time/100 * bugSpeed + b.seed)*0.3; tempScale.set(flap, flap, flap);
+        tempMatrix.compose(tempPosition, tempQuaternion, tempScale); bugMesh.setMatrixAt(i, tempMatrix);
+    }
+    bugMesh.instanceMatrix.needsUpdate = true;
+}
+
+function updateAtmosphere(deltaTime, time) {
+    cloudGroup.children.forEach(c => {
+        c.position.x += c.userData.speed * deltaTime;
+        if (c.position.x > camera.position.x + 150) { c.position.x = camera.position.x - 150; c.position.z = camera.position.z + (Math.random()-0.5)*200; }
+    });
+    for (let i = 0; i < NUM_POLLEN; i++) {
+        const p = pollenData[i];
+        p.pos.y += Math.sin(time/1000 * p.speed + p.phase)*0.1*deltaTime;
+        p.pos.x += Math.cos(time/1200 * p.speed + p.phase)*0.2*deltaTime;
+        p.pos.z += Math.sin(time/1400 * p.speed + p.phase)*0.2*deltaTime;
+        if (p.pos.x > camera.position.x + 30) p.pos.x = camera.position.x - 30;
+        if (p.pos.x < camera.position.x - 30) p.pos.x = camera.position.x + 30;
+        if (p.pos.z > camera.position.z + 30) p.pos.z = camera.position.z - 30;
+        if (p.pos.z < camera.position.z - 30) p.pos.z = camera.position.z + 30;
+        tempPosition.copy(p.pos); tempQuaternion.identity(); tempScale.set(1,1,1);
+        tempMatrix.compose(tempPosition, tempQuaternion, tempScale); pollenMesh.setMatrixAt(i, tempMatrix);
+    }
+    pollenMesh.instanceMatrix.needsUpdate = true;
+}
+
+function updateBalls(deltaTime) {
+    balls.forEach(b => {
+        b.group.visible = !isInfinityMode;
+        if (isInfinityMode) return;
+        b.vel.y -= 20*deltaTime; b.pos.addScaledVector(b.vel, deltaTime);
+        b.vel.x *= 0.98; b.vel.z *= 0.98;
+        const groundY = getElevation(b.pos.x, b.pos.z) + 0.35;
+        if (b.pos.y - b.radius < groundY) { b.pos.y = groundY + b.radius; b.vel.y *= -0.7; }
+        for (const obs of obstacles) {
+            const ox = b.pos.x - obs.x, oz = b.pos.z - obs.z, od = Math.sqrt(ox*ox + oz*oz);
+            if (od < obs.radius + b.radius && b.pos.y < getElevation(obs.x, obs.z) + 1.5) {
+                if (od > 0.001) { const ov = (obs.radius + b.radius) - od; b.pos.x += (ox/od)*ov; b.pos.z += (oz/od)*ov; }
+                b.vel.x *= -0.6; b.vel.z *= -0.6;
+            }
+        }
+        const limit = YARD_SIZE/2 - b.radius - 0.2;
+        if (b.pos.x >  limit) { b.pos.x =  limit; b.vel.x *= -0.8; }
+        if (b.pos.x < -limit) { b.pos.x = -limit; b.vel.x *= -0.8; }
+        if (!isGolfMode && !isDartsMode && !isDetectorMode && !isRcMode && !isBasketballMode) {
+            const dx = b.pos.x - mowerGroup.position.x, dz = b.pos.z - mowerGroup.position.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist < 1.0 + b.radius && b.pos.y < mowerGroup.position.y + 1.5 && dist > 0.001) {
+                const ov = (1.0 + b.radius) - dist;
+                b.pos.x += (dx/dist)*ov; b.pos.z += (dz/dist)*ov;
+                const bumpSpeed = Math.max(3, Math.abs(mowerState.speed));
+                b.vel.x = (dx/dist)*bumpSpeed*1.5; b.vel.z = (dz/dist)*bumpSpeed*1.5;
+                b.vel.y = 5 + Math.random()*3;
+                spawnParticles(b.pos.x, b.pos.z, 0xffffff, 3, 0.5); 
+            }
+        }
+        b.group.position.copy(b.pos);
+        if (b.vel.lengthSq() > 0.01) {
+            const speed = b.vel.length();
+            _ballRotAxis.set(b.vel.z, 0, -b.vel.x).normalize(); 
+            b.mesh.rotateOnWorldAxis(_ballRotAxis, speed*deltaTime*1.5);
+        }
+    });
+}
+
+function updateDayNight(deltaTime) {
+    dayNightTime = (dayNightTime + deltaTime) % DAY_CYCLE_DURATION;
+    const hour   = (dayNightTime / DAY_CYCLE_DURATION) * 24;
+    const angle  = ((hour - 6) / 24) * Math.PI * 2;
+    const sunY   = Math.sin(angle) * 50;
+    dirLight.position.set(-Math.cos(angle)*50, sunY, 20);
+    const R = 140;
+    sunMesh.position.set( camera.position.x - Math.cos(angle)*R,        camera.position.y + Math.sin(angle)*R,        camera.position.z - 50); sunMesh.lookAt(camera.position);
+    moonMesh.position.set(camera.position.x - Math.cos(angle+Math.PI)*R, camera.position.y + Math.sin(angle+Math.PI)*R, camera.position.z - 50); moonMesh.lookAt(camera.position);
+
+    let skyColor    = colorDaySky.clone();
+    let lightColor  = colorSunLight.clone();
+    let intensity   = 0.8;
+    let hlIntensity = 0;
+    let ambIntensity = 0.6;
+
+    if (hour >= 7 && hour <= 17) {
+        skyColor.copy(colorDaySky); lightColor.copy(colorSunLight);
+        intensity = 0.8; ambIntensity = 0.6; hlIntensity = 0;
+    } else if (hour > 17 && hour < 19) {
+        const t = (hour - 17) / 2;
+        if (t < 0.5) { skyColor.lerpColors(colorDaySky, colorSunsetSky, t*2); lightColor.lerpColors(colorSunLight, colorSunsetLight, t*2); }
+        else          { skyColor.lerpColors(colorSunsetSky, colorNightSky, (t-0.5)*2); lightColor.lerpColors(colorSunsetLight, colorMoonLight, (t-0.5)*2); }
+        intensity    = 0.8 - t*0.75; ambIntensity = 0.6 - t*0.5; hlIntensity = t*2;
+    } else if (hour >= 19 || hour < 5) {
+        skyColor.copy(colorNightSky); lightColor.copy(colorMoonLight);
+        intensity = 0.05; ambIntensity = 0.1; hlIntensity = 2;
+    } else if (hour >= 5 && hour < 7) {
+        const t = (hour - 5) / 2;
+        if (t < 0.5) { skyColor.lerpColors(colorNightSky, colorSunsetSky, t*2); lightColor.lerpColors(colorMoonLight, colorSunsetLight, t*2); }
+        else          { skyColor.lerpColors(colorSunsetSky, colorDaySky, (t-0.5)*2); lightColor.lerpColors(colorSunsetLight, colorSunLight, (t-0.5)*2); }
+        intensity = 0.05 + t*0.75; ambIntensity = 0.1 + t*0.5; hlIntensity = 2 - t*2;
+    }
+
+    scene.background    = skyColor;
+    scene.fog.color     = skyColor;
+    dirLight.color      = lightColor;
+    dirLight.intensity  = intensity;
+    ambientLight.intensity = ambIntensity;
+    isNightTime = (hour >= 18 || hour < 6);
+
+    const clamped = Math.min(2, Math.max(0, hlIntensity));
+    currentHlIntensity = clamped;
+    headlights.forEach(hl => { hl.intensity = clamped; });
+    
+    if (golfLightRef) golfLightRef.intensity = isGolfMode ? clamped : 0;
+    if (dartLightRef) dartLightRef.intensity = isDartsMode ? clamped : 0;
+    if (detectorLight) detectorLight.intensity = isDetectorMode ? clamped : 0;
+
+    placedTorches.forEach(t => {
+        if (t && t.userData) {
+            t.userData.flame.visible = clamped > 0;
+            t.userData.light.intensity = clamped * 0.75; 
+        }
+    });
+}
+
+function updateMower(deltaTime) {
+    if (hoverTimer > 0) hoverTimer -= deltaTime;
+    if (hoverCooldown > 0) hoverCooldown -= deltaTime;
+
+    mowerState.prevX = mowerGroup.position.x;
+    mowerState.prevZ = mowerGroup.position.z;
+
+    if (keys.forward)       mowerState.speed += mowerState.acceleration * deltaTime;
+    else if (keys.backward) mowerState.speed -= mowerState.acceleration * deltaTime;
+    else {
+        if (mowerState.speed > 0) mowerState.speed = Math.max(0, mowerState.speed - mowerState.deceleration*deltaTime);
+        else                       mowerState.speed = Math.min(0, mowerState.speed + mowerState.deceleration*deltaTime);
+    }
+    const maxFwd = keys.backward ? mowerState.maxSpeed*0.5 : mowerState.maxSpeed;
+    mowerState.speed = THREE.MathUtils.clamp(mowerState.speed, -maxFwd, maxFwd);
+
+    if (Math.abs(mowerState.speed) > 0.1) {
+        const dir = mowerState.speed > 0 ? 1 : -1;
+        if (keys.left)  mowerState.heading += mowerState.rotationSpeed*dir*deltaTime;
+        if (keys.right) mowerState.heading -= mowerState.rotationSpeed*dir*deltaTime;
+    }
+
+    mowerGroup.rotation.y = mowerState.heading;
+    let nextX = mowerGroup.position.x + Math.sin(mowerState.heading)*mowerState.speed*deltaTime;
+    let nextZ = mowerGroup.position.z + Math.cos(mowerState.heading)*mowerState.speed*deltaTime;
+
+    if (!isInfinityMode) {
+        for (const obs of obstacles) {
+            const dx = nextX - obs.x, dz = nextZ - obs.z, dist = Math.sqrt(dx*dx + dz*dz);
+            const minD = obs.radius + 0.6;
+            // Ignore obstacle collisions if hovering
+            if (dist < minD && dist > 0.001 && hoverTimer <= 0) { const ov = minD - dist; nextX += (dx/dist)*ov; nextZ += (dz/dist)*ov; mowerState.speed *= 0.8; }
+        }
+        const bound = YARD_SIZE/2 - 0.6;
+        mowerGroup.position.x = THREE.MathUtils.clamp(nextX, -bound, bound);
+        mowerGroup.position.z = THREE.MathUtils.clamp(nextZ, -bound, bound);
+    } else {
+        mowerGroup.position.x = nextX || 0;
+        mowerGroup.position.z = nextZ || 0;
+    }
+    
+    // Hover height interpolation
+    const targetHoverOffset = hoverTimer > 0 ? 1.5 : 0;
+    currentHoverOffset += (targetHoverOffset - currentHoverOffset) * 10 * deltaTime;
+    mowerGroup.position.y = getElevation(mowerGroup.position.x, mowerGroup.position.z) + currentHoverOffset;
+
+    if (hoverTimer > 0 && Math.random() < 0.3) {
+        spawnParticles(mowerGroup.position.x, mowerGroup.position.z, 0x00aaff, 1, 0.2); // Hover thrust visual
+    }
+
+    const h  = mowerState.heading;
+    const fY = getElevation(mowerGroup.position.x + Math.sin(h)*0.8, mowerGroup.position.z + Math.cos(h)*0.8);
+    const bY = getElevation(mowerGroup.position.x - Math.sin(h)*0.8, mowerGroup.position.z - Math.cos(h)*0.8);
+    const rY = getElevation(mowerGroup.position.x + Math.cos(h)*0.6, mowerGroup.position.z - Math.sin(h)*0.6);
+    const lY = getElevation(mowerGroup.position.x - Math.cos(h)*0.6, mowerGroup.position.z + Math.sin(h)*0.6);
+    mowerGroup.rotation.order = 'YXZ';
+    mowerGroup.rotation.x = -Math.atan2(fY - bY, 1.6);
+    mowerGroup.rotation.z =  Math.atan2(rY - lY, 1.2);
+
+    if (laserPowerupActive && mowerGroup.position.distanceTo(laserPowerupGroup.position) < mowerCutRadius + 0.8) {
+        laserPowerupActive = false; laserPowerupGroup.visible = false;
+        mowerHasLaser = true; laserTimeLeft = LASER_DURATION_SEC; 
+        showNotification('LASER ACQUIRED!', "Press 'G' to FIRE!", 4000);
+        document.getElementById('icon-laser').classList.remove('opacity-40');
+    }
+    if (orbPowerupGroup?.visible && mowerGroup.position.distanceTo(orbPowerupGroup.position) < mowerCutRadius + 0.8) {
+        orbPowerupGroup.visible = false; hasOrb = true;
+        showNotification('ORB OF TIME ACQUIRED!', "Press 'O' to Command the Sun!", 4000);
+        document.getElementById('icon-orb').classList.remove('opacity-40');
+    }
+    if (waterGunPowerupGroup?.visible && mowerGroup.position.distanceTo(waterGunPowerupGroup.position) < mowerCutRadius + 0.8) {
+        waterGunPowerupGroup.visible = false; hasWaterGun = true;
+        showNotification('WATER GUN ACQUIRED!', "Hold 'H' to Spray!", 4000);
+        document.getElementById('icon-water').classList.remove('opacity-40');
+    }
+    if (torchPowerupGroup?.visible && mowerGroup.position.distanceTo(torchPowerupGroup.position) < mowerCutRadius + 0.8) {
+        torchPowerupGroup.visible = false;
+        if (torchesInventory < MAX_TORCHES) torchesInventory++;
+        showNotification('TIKI TORCH ACQUIRED!', "Press 'T' to place a light source!", 4000);
+        updateTorchUI();
+    }
+
+    if (bombActive && mowerGroup.position.distanceTo(bombGroup.position) < mowerCutRadius + 0.8) {
+        bombActive = false; bombGroup.visible = false;
+        spawnParticles(bombGroup.position.x, bombGroup.position.z, 0xffaa00, 50, 3);
+        showNotification('KABOOM!', 'Yard Cleared!', 3000);
+        for (let i = 0; i < YARD_GRASS_COUNT; i++) {
+            if (yardGrassStates[i] === 0) {
+                yardGrassStates[i] = 1; mowedCount++;
+                grassMesh.getMatrixAt(i, tempMatrix); tempMatrix.decompose(tempPosition, tempQuaternion, tempScale);
+                tempScale.y = 0.1; tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+                grassMesh.setMatrixAt(i, tempMatrix); grassMesh.setColorAt(i, _tempColor.set(0x7CFC00));
+                if (yardWeedStates[i] > 0) {
+                    const wid = yardWeedStates[i]-1;
+                    weedMesh.getMatrixAt(wid, tempMatrix); tempMatrix.decompose(tempPosition, tempQuaternion, tempScale);
+                    tempScale.set(0,0,0); tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+                    weedMesh.setMatrixAt(wid, tempMatrix); yardWeedStates[i] = 0; weedsMowed++;
+                }
+            }
+        }
+        weedMesh.instanceMatrix.needsUpdate  = true;
+        grassMesh.instanceMatrix.needsUpdate = true;
+        if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+        updateProgressUI();
+        checkYardComplete(); 
+    }
+
+    if (hasWaterGun && keys.water) sprayWater(deltaTime);
+}
+
+function updateCamera() {
+    const targetX = isGolfMode ? golfState.pos.x : (isDartsMode ? dartsState.pos.x : (isDetectorMode ? detectorState.pos.x : (isRcMode ? rcGroup.position.x : mowerGroup.position.x)));
+    const targetY = isGolfMode ? golfState.pos.y : (isDartsMode ? dartsState.pos.y : (isDetectorMode ? detectorState.pos.y : (isRcMode ? rcGroup.position.y : mowerGroup.position.y)));
+    const targetZ = isGolfMode ? golfState.pos.z : (isDartsMode ? dartsState.pos.z : (isDetectorMode ? detectorState.pos.z : (isRcMode ? rcGroup.position.z : mowerGroup.position.z)));
+    
+    if (!isDraggingCam && !isGolfMode && !isDartsMode && !isBasketballMode) {
+        let refSpeed = isDetectorMode ? detectorState.speed : (isRcMode ? rcState.speed : mowerState.speed);
+        let refHeading = isDetectorMode ? detectorState.heading : (isRcMode ? rcState.heading : mowerState.heading);
+        if (Math.abs(refSpeed) > 0.5) {
+            let diff = refHeading - camYaw;
+            while (diff >  Math.PI) diff -= Math.PI*2;
+            while (diff < -Math.PI) diff += Math.PI*2;
+            camYaw += diff * 0.015;
+        }
+    }
+    const camX = targetX - Math.sin(camYaw)*Math.cos(camPitch)*camDistance;
+    const camZ = targetZ - Math.cos(camYaw)*Math.cos(camPitch)*camDistance;
+    const camY = targetY + Math.sin(camPitch)*camDistance;
+    camera.position.x += (camX - camera.position.x)*0.1;
+    camera.position.z += (camZ - camera.position.z)*0.1;
+    camera.position.y += (camY - camera.position.y)*0.1;
+    camera.lookAt(targetX, targetY + 0.5, targetZ);
+    if (isInfinityMode) { scene.fog.near = camDistance + 5; scene.fog.far = Math.min(camDistance + 35, 70 - camDistance); }
+    else                { scene.fog.near = 40; scene.fog.far = 180; }
+}
+
+function toggleDayNight() {
+    const hour = (dayNightTime / DAY_CYCLE_DURATION) * 24;
+    if (hour >= 6 && hour < 18) { dayNightTime = DAY_CYCLE_DURATION*(20/24); showNotification('NIGHTFALL', 'The Orb shifted time!', 2000); }
+    else                         { dayNightTime = DAY_CYCLE_DURATION*(10/24); showNotification('DAYBREAK', 'The Orb shifted time!', 2000); }
+}
+
+function fireLaser() {
+    const l = lasersData.find(x => !x.active); if (!l) return;
+    l.active = true; l.pos.copy(mowerGroup.position); l.pos.y += 0.5;
+    const speed = 25;
+    l.vel.set(Math.sin(mowerState.heading)*speed, 0, Math.cos(mowerState.heading)*speed);
+}
+
+function placeTorch() {
+    if (torchesInventory <= 0) return;
+    torchesInventory--;
+    updateTorchUI();
+
+    const torch = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.5), new THREE.MeshStandardMaterial({color: 0x8B4513}));
+    pole.position.y = 0.75; pole.castShadow = true; pole.receiveShadow = true;
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshBasicMaterial({color: 0xffaa00}));
+    flame.position.y = 1.6;
+    const light = new THREE.PointLight(0xffaa00, 0, 15);
+    light.position.y = 1.6;
+
+    torch.add(pole, flame, light);
+    torch.userData = { flame, light };
+
+    torch.position.copy(mowerGroup.position);
+    torch.position.x -= Math.sin(mowerState.heading) * 1.5;
+    torch.position.z -= Math.cos(mowerState.heading) * 1.5;
+    torch.position.y = getElevation(torch.position.x, torch.position.z);
+
+    scene.add(torch);
+    placedTorches.push(torch);
+
+    if (placedTorches.length > MAX_PLACED_TORCHES) {
+        const oldTorch = placedTorches.shift();
+        scene.remove(oldTorch);
+    }
+    
+    updateDayNight(0); 
+}
+
+function spawnBomb() {
+    const unmowed = [];
+    for (let i = 0; i < YARD_GRASS_COUNT; i++) if (yardGrassStates[i] === 0) unmowed.push(i);
+    if (unmowed.length === 0) return;
+    const validIdx = unmowed[Math.floor(Math.random() * unmowed.length)];
+    const row = Math.floor(validIdx / GRASS_GRID_SIZE), col = validIdx % GRASS_GRID_SIZE;
+    const x   = (col * GRASS_STEP) - (YARD_SIZE/2) + (GRASS_STEP/2);
+    const z   = (row * GRASS_STEP) - (YARD_SIZE/2) + (GRASS_STEP/2);
+    bombGroup.position.set(x, getElevation(x, z) + 0.4, z);
+    bombGroup.visible = true; bombActive = true; bombSpawned = true;
+    showNotification('BOMB APPEARED!', 'Hit it to clear the rest of the yard!', 4000);
+}
+
+function spawnItem(group, name) {
+    let valid = false, px, pz, tries = 0;
+    const bounds = isInfinityMode ? 30 : (YARD_SIZE/2 - 2);
+    while (!valid && tries < 50) {
+        if (isInfinityMode) { px = mowerGroup.position.x + (Math.random()-0.5)*bounds*2; pz = mowerGroup.position.z + (Math.random()-0.5)*bounds*2; }
+        else                { px = (Math.random()-0.5)*bounds*2; pz = (Math.random()-0.5)*bounds*2; }
+        valid = true;
+        if (!isInfinityMode) { for (const obs of obstacles) if (Math.hypot(px-obs.x, pz-obs.z) < obs.radius+1) valid = false; }
+        else { if (deterministicHash(Math.floor(px/GRASS_STEP), Math.floor(pz/GRASS_STEP)) < 0.015) valid = false; }
+        tries++;
+    }
+    group.position.set(px, getElevation(px, pz)+1, pz); group.visible = true;
+    showNotification(`${name} SPAWNED!`, 'Look around to find it!', 3000);
+}
+
+function sprayWater(deltaTime) {
+    spawnParticles(mowerGroup.position.x + Math.sin(mowerState.heading), mowerGroup.position.z + Math.cos(mowerState.heading), 0x00aaff, 2, 0.5);
+    const sprayX = mowerGroup.position.x + Math.sin(mowerState.heading)*2;
+    const sprayZ = mowerGroup.position.z + Math.cos(mowerState.heading)*2;
+    if (isInfinityMode) {
+        const cx = Math.floor(sprayX/GRASS_STEP), cz = Math.floor(sprayZ/GRASS_STEP);
+        for (let r = -2; r <= 2; r++) for (let c = -2; c <= 2; c++) {
+            const k = cellKey(cx+c, cz+r); 
+            const w = worldWateredMap.get(k) || 0;
+            if (w < 2) worldWateredMap.set(k, w + deltaTime*3);
+            if (worldMowedMap.get(k)) worldMowedMap.set(k, false);
+        }
+        updateInfinityGrid(true);
+    } else {
+        const halfYard = YARD_SIZE/2;
+        const minCol   = Math.max(0, Math.floor((sprayX - 1 + halfYard)/GRASS_STEP));
+        const maxCol   = Math.min(GRASS_GRID_SIZE-1, Math.floor((sprayX + 1 + halfYard)/GRASS_STEP));
+        const minRow   = Math.max(0, Math.floor((sprayZ - 1 + halfYard)/GRASS_STEP));
+        const maxRow   = Math.min(GRASS_GRID_SIZE-1, Math.floor((sprayZ + 1 + halfYard)/GRASS_STEP));
+        for (let row = minRow; row <= maxRow; row++) for (let col = minCol; col <= maxCol; col++) {
+            const idx = row * GRASS_GRID_SIZE + col;
+            yardGrassWatered[idx] = Math.min(2, yardGrassWatered[idx] + deltaTime*3);
+            if (yardGrassStates[idx] === 1) { yardGrassStates[idx] = 0; mowedCount--; }
+            grassMesh.getMatrixAt(idx, tempMatrix); tempMatrix.decompose(tempPosition, tempQuaternion, tempScale);
+            tempScale.y = 1 + yardGrassWatered[idx]; tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+            grassMesh.setMatrixAt(idx, tempMatrix);
+            grassMesh.setColorAt(idx, _tempColor.setHSL(0.33, 0.5, 0.4 + (Math.random()-0.5)*0.1)); 
+        }
+        grassMesh.instanceMatrix.needsUpdate = true;
+        if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+        updateProgressUI();
+    }
+}
+
+function updateLasers(deltaTime) {
+    let updated = false;
+    for (let i = 0; i < MAX_LASERS; i++) {
+        const l = lasersData[i]; if (!l.active) continue;
+        l.pos.addScaledVector(l.vel, deltaTime);
+        if (Math.hypot(l.pos.x - mowerGroup.position.x, l.pos.z - mowerGroup.position.z) > 40) l.active = false;
+        if (l.active && !isInfinityMode) {
+            for (const obs of obstacles) if (Math.hypot(l.pos.x - obs.x, l.pos.z - obs.z) < obs.radius) { l.active = false; spawnParticles(l.pos.x, l.pos.z, 0x00ff00, 5, 0.5); break; }
+        } else if (l.active && isInfinityMode) {
+            if (deterministicHash(Math.floor(l.pos.x/GRASS_STEP), Math.floor(l.pos.z/GRASS_STEP)) < 0.015) { l.active = false; spawnParticles(l.pos.x, l.pos.z, 0x00ff00, 5, 0.5); }
+        }
+        if (l.active) checkGrassCollision(l.pos.x, l.pos.z, 0.8, true);
+        if (l.active) {
+            tempPosition.copy(l.pos); tempQuaternion.setFromAxisAngle(_bugUpAxis, Math.atan2(l.vel.x, l.vel.z)); tempScale.set(1,1,1);
+            tempMatrix.compose(tempPosition, tempQuaternion, tempScale); laserMesh.setMatrixAt(i, tempMatrix); updated = true;
+        } else { laserMesh.setMatrixAt(i, tempMatrix.makeScale(0,0,0)); updated = true; }
+    }
+    if (updated) laserMesh.instanceMatrix.needsUpdate = true;
+}
+
+function updatePowerupsAndBomb(deltaTime, time) {
+    if (bombActive) bombGroup.children[3].scale.setScalar(1 + Math.sin(time*0.01)*0.3);
+    if (!isGolfMode && !isDartsMode && !isDetectorMode && !isRcMode && !isBasketballMode) {
+        if (!laserPowerupActive && !mowerHasLaser) {
+            laserTimer += deltaTime;
+            if (laserTimer >= LASER_SPAWN_TIME) { laserTimer = 0; laserPowerupActive = true; spawnItem(laserPowerupGroup, 'LASER'); }
+        }
+        if (laserPowerupActive) {
+            laserPowerupGroup.rotation.y += deltaTime*2; laserPowerupGroup.rotation.x += deltaTime*1.5;
+            laserPowerupGroup.position.y = getElevation(laserPowerupGroup.position.x, laserPowerupGroup.position.z) + 1 + Math.sin(time*0.005)*0.2;
+        }
+        if (!hasWaterGun && !waterGunPowerupGroup.visible) {
+            waterGunTimer += deltaTime;
+            if (waterGunTimer >= WATER_SPAWN_TIME) { waterGunTimer = 0; spawnItem(waterGunPowerupGroup, 'WATER GUN'); }
+        }
+        if (waterGunPowerupGroup.visible) {
+            waterGunPowerupGroup.rotation.y += deltaTime;
+            waterGunPowerupGroup.position.y = getElevation(waterGunPowerupGroup.position.x, waterGunPowerupGroup.position.z) + 1 + Math.sin(time*0.005)*0.2;
+        }
+        if (!hasOrb && !orbPowerupGroup.visible) {
+            orbTimer += deltaTime;
+            if (orbTimer >= ORB_SPAWN_TIME) { orbTimer = 0; spawnItem(orbPowerupGroup, 'ORB OF TIME'); }
+        }
+        if (orbPowerupGroup.visible) {
+            orbPowerupGroup.rotation.y -= deltaTime; orbPowerupGroup.rotation.x += deltaTime*0.5;
+            orbPowerupGroup.position.y = getElevation(orbPowerupGroup.position.x, orbPowerupGroup.position.z) + 1.2 + Math.sin(time*0.005)*0.3;
+        }
+        if (torchesInventory < MAX_TORCHES && !torchPowerupGroup.visible) {
+            torchTimer += deltaTime;
+            if (torchTimer >= TORCH_SPAWN_TIME) { torchTimer = 0; spawnItem(torchPowerupGroup, 'TIKI TORCH'); }
+        }
+        if (torchPowerupGroup.visible) {
+            torchPowerupGroup.rotation.y += deltaTime;
+            torchPowerupGroup.rotation.z = Math.sin(time*0.005)*0.1;
+            torchPowerupGroup.position.y = getElevation(torchPowerupGroup.position.x, torchPowerupGroup.position.z) + 1 + Math.sin(time*0.005)*0.2;
+        }
+
+        if (laserCooldown > 0) laserCooldown -= deltaTime;
+        const laserUI = document.getElementById('laser-ui');
+        if (mowerHasLaser) {
+            laserTimeLeft -= deltaTime; laserUI.style.display = 'flex';
+            document.getElementById('laser-bar').style.width = `${(Math.max(0, laserTimeLeft) / LASER_DURATION_SEC) * 100}%`; 
+            if (laserTimeLeft <= 0) {
+                mowerHasLaser = false; laserUI.style.display = 'none'; showNotification('LASER DEPLETED', '', 2000);
+                document.getElementById('icon-laser').classList.add('opacity-40');
+            }
+        } else { laserUI.style.display = 'none'; }
+    }
+}
+
+function checkGrassCollision(mx = mowerGroup.position.x, mz = mowerGroup.position.z, radius = mowerCutRadius, isLaser = false) {
+    if (!isLaser && Math.abs(mowerState.speed) < 0.01) return;
+    if (!isLaser && hoverTimer > 0) return; 
+
+    const px = isLaser ? mx : mowerState.prevX;
+    const pz = isLaser ? mz : mowerState.prevZ;
+    let grassUpdated = false;
+
+    if (isInfinityMode) {
+        if (lastMowerCellX === -999999) return;
+
+        const cx = Math.floor(mx / GRASS_STEP), cz = Math.floor(mz / GRASS_STEP);
+        for (let r = -2; r <= 2; r++) for (let c = -2; c <= 2; c++) {
+            const wx = cx + c, wz = cz + r;
+            const k  = cellKey(wx, wz); 
+            if (worldMowedMap.get(k)) continue;
+            const gx = wx*GRASS_STEP, gz = wz*GRASS_STEP;
+            const l2 = (mx-px)**2 + (mz-pz)**2;
+            let distSq;
+            if (l2 === 0) { distSq = (gx-mx)**2 + (gz-mz)**2; }
+            else { const t = Math.max(0, Math.min(1, ((gx-px)*(mx-px)+(gz-pz)*(mz-pz))/l2)); distSq = (gx-(px+t*(mx-px)))**2 + (gz-(pz+t*(mz-pz)))**2; }
+            if (distSq < radius*radius) {
+                worldMowedMap.set(k, true); grassUpdated = true;
+                if (isLaser && Math.random() < 0.2) spawnParticles(gx, gz, 0x00ff00, 1, 0.5);
+                else if (!isLaser) spawnParticles(gx, gz, 0x4CAF50, 2); 
+                if (!isLaser && Math.random() < 0.005) { spawnParticles(gx, gz, 0xFFD700, 3, 2); addCoins(1); }
+                const h = deterministicHash(wx, wz);
+                if (h >= 0.015 && h < 0.025 && !worldWeedMap.get(k)) {
+                    worldWeedMap.set(k, true);
+                    if (!isLaser) { spawnParticles(gx, gz, 0xFFFFFF, 8, 1.5); if (Math.random() < 0.25) { spawnParticles(gx, gz, 0xFFD700, 5, 2); addCoins(Math.floor(Math.random()*2)+1); } }
+                    if (!isLaser) updateInfinityGrid(true);
+                }
+                const localC = wx - lastMowerCellX, localR = wz - lastMowerCellZ;
+                if (localC >= -INF_GRID_RADIUS && localC < INF_GRID_RADIUS && localR >= -INF_GRID_RADIUS && localR < INF_GRID_RADIUS) {
+                    const idx = (localR + INF_GRID_RADIUS)*(INF_GRID_RADIUS*2) + (localC + INF_GRID_RADIUS);
+                    grassMesh.getMatrixAt(idx, tempMatrix); tempMatrix.decompose(tempPosition, tempQuaternion, tempScale);
+                    tempScale.y = 0.1; tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+                    grassMesh.setMatrixAt(idx, tempMatrix);
+                    grassMesh.setColorAt(idx, _tempColor.set(0x7CFC00)); 
+                }
+            }
+        }
+        if (grassUpdated) {
+            grassMesh.instanceMatrix.needsUpdate = true;
+            if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+            document.getElementById('progress-text').innerText = `${worldMowedMap.size} Sq`;
+        }
+        return;
+    }
+
+    const halfYard = YARD_SIZE / 2;
+    const minX = Math.min(px, mx) - radius, maxX = Math.max(px, mx) + radius;
+    const minZ = Math.min(pz, mz) - radius, maxZ = Math.max(pz, mz) + radius;
+    const minCol = Math.max(0, Math.floor((minX + halfYard)/GRASS_STEP));
+    const maxCol = Math.min(GRASS_GRID_SIZE-1, Math.floor((maxX + halfYard)/GRASS_STEP));
+    const minRow = Math.max(0, Math.floor((minZ + halfYard)/GRASS_STEP));
+    const maxRow = Math.min(GRASS_GRID_SIZE-1, Math.floor((maxZ + halfYard)/GRASS_STEP));
+
+    for (let row = minRow; row <= maxRow; row++) {
+        for (let col = minCol; col <= maxCol; col++) {
+            const index = row * GRASS_GRID_SIZE + col;
+            if (yardGrassStates[index] === 1) continue;
+            const gx = (col*GRASS_STEP) - halfYard + (GRASS_STEP/2);
+            const gz = (row*GRASS_STEP) - halfYard + (GRASS_STEP/2);
+            const l2 = (mx-px)**2 + (mz-pz)**2;
+            let distSq;
+            if (l2 === 0) { distSq = (gx-mx)**2 + (gz-mz)**2; }
+            else { const t = Math.max(0, Math.min(1, ((gx-px)*(mx-px)+(gz-pz)*(mz-pz))/l2)); distSq = (gx-(px+t*(mx-px)))**2 + (gz-(pz+t*(mz-pz)))**2; }
+            if (distSq < radius*radius) {
+                yardGrassStates[index] = 1; mowedCount++; grassUpdated = true;
+                grassMesh.getMatrixAt(index, tempMatrix); tempMatrix.decompose(tempPosition, tempQuaternion, tempScale);
+                tempScale.y = 0.1; tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+                grassMesh.setMatrixAt(index, tempMatrix);
+                grassMesh.setColorAt(index, _tempColor.set(0x7CFC00)); 
+                if (isLaser && Math.random() < 0.2) spawnParticles(gx, gz, 0x00ff00, 1, 0.5);
+                else if (!isLaser) spawnParticles(gx, gz, 0x4CAF50, 2); 
+                if (!isLaser && Math.random() < 0.005) { spawnParticles(gx, gz, 0xFFD700, 3, 2); addCoins(1); }
+                if (yardWeedStates[index] > 0) {
+                    const wid = yardWeedStates[index]-1;
+                    weedMesh.getMatrixAt(wid, tempMatrix); tempMatrix.decompose(tempPosition, tempQuaternion, tempScale);
+                    tempScale.set(0,0,0); tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+                    weedMesh.setMatrixAt(wid, tempMatrix); weedMesh.instanceMatrix.needsUpdate = true;
+                    if (!isLaser) { spawnParticles(gx, gz, 0xFFFFFF, 8, 1.5); if (Math.random() < 0.25) { spawnParticles(gx, gz, 0xFFD700, 5, 2); addCoins(Math.floor(Math.random()*2)+1); } }
+                    yardWeedStates[index] = 0; weedsMowed++;
+                }
+            }
+        }
+    }
+
+    if (grassUpdated) {
+        grassMesh.instanceMatrix.needsUpdate = true;
+        if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+        updateProgressUI();
+        if (!bombSpawned && (mowedCount / YARD_GRASS_COUNT) >= 0.95) spawnBomb();
+        checkYardComplete(); 
+    }
+}
+
+// =============================================================================
+// MAIN LOOP
+// =============================================================================
+function gameLoop(time) {
+    requestAnimationFrame(gameLoop);
+    if (!isGameRunning) return;
+    const deltaTime = Math.min((time - lastTime) / 1000, 0.1);
+    lastTime = time;
+
+    updateDayNight(deltaTime);
+    updateAtmosphere(deltaTime, time);
+    updateParticles(deltaTime);
+    updateBugs(deltaTime, time);
+    updateAudio();
+
+    if (!isShopOpen && !isResetting) {
+        updatePowerupsAndBomb(deltaTime, time);
+        updateLasers(deltaTime);
+        if (isInfinityMode) updateInfinityGrid();
+        
+        if (isGolfMode) { updateGolf(deltaTime); }
+        else if (isDartsMode) { updateDarts(deltaTime); }
+        else if (isBasketballMode) { updateBasketball(deltaTime); }
+        else if (isDetectorMode) { updateDetector(deltaTime); }
+        else if (isRcMode) { updateRcCar(deltaTime); }
+        else { updateMower(deltaTime); checkGrassCollision(); }
+        
+        updateCamera();
+        updateBalls(deltaTime);
+    }
+
+    renderer.render(scene, camera);
+}
+
+window.onload = init;
+</script>
+</body>
+</html>
