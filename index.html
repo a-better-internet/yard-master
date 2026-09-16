@@ -1154,8 +1154,10 @@ function partBuilder() {
     const pv = new THREE.Vector3(), sv = new THREE.Vector3(1, 1, 1);
     return {
         // add(material, geometry, x, y, z, rotX, rotY, rotZ)
+        // Rotations use YXZ order: yaw is applied outermost, so rotX/rotZ tilt
+        // the part in its own yawed frame. See the note above on gable roofs.
         add(mat, geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
-            e.set(rx, ry, rz); q.setFromEuler(e); pv.set(x, y, z);
+            e.set(rx, ry, rz, 'YXZ'); q.setFromEuler(e); pv.set(x, y, z);
             m.compose(pv, q, sv);
             const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(m);
             if (!buckets.has(mat)) buckets.set(mat, []);
@@ -1526,6 +1528,7 @@ function buildStaticEnvironment() {
 
     buildDistantHills();
     buildTreeline();
+    buildOutsideScenery();
     buildNeighbourhood();
     buildSummerDecor();
     buildCritters();
@@ -1548,7 +1551,6 @@ function buildStaticEnvironment() {
     infGrassMesh.instanceColor.needsUpdate = true;
     scene.add(infGrassMesh);
     grassMesh = yardGrassMesh;
-    buildMeadow(grassMat);      // shares the lawn's wind material
 
     infRockMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.8, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), MAX_INF_ROCKS);
     infRockMesh.castShadow = true; infRockMesh.frustumCulled = false; infRockMesh.visible = false;
@@ -1889,7 +1891,7 @@ function buildFoundationPlanting(houseGroup, W, frontZ, PW, PD) {
     // Flower heads tucked between the shrubs. Anchoring them to the shrub spots
     // keeps the bed reading as a planted border rather than scattered confetti.
     const FLOWERS = 110;
-    const flowerMat = new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide });
+    const flowerMat = new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide, vertexColors: true });
     const flowers = new THREE.InstancedMesh(makeFlowerGeometry(), flowerMat, FLOWERS);
     flowers.castShadow = false;
     for (let i = 0; i < FLOWERS; i++) {
@@ -1910,23 +1912,28 @@ function buildFoundationPlanting(houseGroup, W, frontZ, PW, PD) {
     houseGroup.add(flowers);
 }
 
-// A stem with a ring of petals — enough to read as a flower at garden distance.
+// A clump of three stems with petal rings — a clump reads as a patch of
+// wildflowers, where a lone stem reads as a stick. Vertex colours keep the
+// stems green; the per-instance colour supplies the bloom hue on the petals.
 function makeFlowerGeometry() {
     const parts = [];
-    const stem = new THREE.CylinderGeometry(0.02, 0.028, 0.55, 4);
-    stem.translate(0, 0.275, 0);
-    parts.push([stem, 0x4E7C2E]);
-    for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        const petal = new THREE.CircleGeometry(0.075, 5);
-        petal.rotateX(-Math.PI / 2.4);
-        petal.rotateY(a);
-        petal.translate(Math.cos(a) * 0.065, 0.58, Math.sin(a) * 0.065);
-        parts.push([petal, 0xFFFFFF]);           // white: the instance colour does the tinting
+    const stalks = [[0, 0, 0.62, 0], [0.11, 0.07, 0.46, 0.13], [-0.09, 0.1, 0.52, -0.1]];
+    for (const [ox, oz, h, lean] of stalks) {
+        const stem = new THREE.CylinderGeometry(0.018, 0.026, h, 4);
+        stem.translate(0, h / 2, 0);
+        stem.rotateZ(lean);
+        stem.translate(ox, 0, oz);
+        parts.push([stem, 0x3E6B26]);
+        for (let i = 0; i < 5; i++) {
+            const a = (i / 5) * Math.PI * 2;
+            const petal = new THREE.CircleGeometry(0.07, 5);
+            petal.rotateX(-Math.PI / 2.4);
+            petal.rotateY(a);
+            petal.translate(ox + Math.cos(a) * 0.06 + lean * h * 0.5, h + 0.03, oz + Math.sin(a) * 0.06);
+            parts.push([petal, 0xFFFFFF]);       // white, so the instance colour reads true
+        }
     }
-    const geo = mergeColored(parts);
-    geo.deleteAttribute('color');                // instanceColor alone drives the hue
-    return geo;
+    return mergeColored(parts);
 }
 
 // A flagstone path running from the porch steps down toward the yard gate.
@@ -1960,7 +1967,7 @@ function buildGardenPath(startZ, endZ) {
 // beyond the fence is a flat green plate running to the fog, which kills any
 // sense that the yard sits somewhere.
 function buildTreeline() {
-    const COUNT = 190;
+    const COUNT = 420;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
 
     // One instanced mesh per species; each tree picks a species by hash.
@@ -1978,14 +1985,19 @@ function buildTreeline() {
         const h1 = deterministicHash(i * 1.7 + 0.3, i * 0.9 - 2.1);
         const h2 = deterministicHash(i * 2.3 - 1.1, i * 3.1 + 0.7);
         const h3 = deterministicHash(i * 0.5 + 5.5, i * 1.3 + 9.9);
-        const ang = (i / COUNT) * Math.PI * 2 + (h1 - 0.5) * 0.09;
-        const rad = 46 + h2 * 46;
+        // Spread over several turns rather than one ring, so the wood has depth
+        // instead of reading as a single hedge line.
+        const ang = (i * 2.399963) + (h1 - 0.5) * 0.5;      // golden angle
+        const rad = 30 + Math.sqrt(h2) * 80;
         const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
         const k = h3 < 0.22 ? 1 : (h3 < 0.42 ? 2 : 0);
         const mesh = species[k];
         const slot = mesh.count++;
-        // Leave the house's plot clear.
-        if (z < -YARD_SIZE / 2 && Math.abs(x) < 16 && rad < 58) { mesh.setMatrixAt(slot, hidden); continue; }
+        // Leave the house's plot, the shed and the pole line clear.
+        const blocked = (z < -YARD_SIZE / 2 && Math.abs(x) < 18 && rad < 62)
+            || Math.hypot(x + YARD_SIZE / 2 + 6.5, z - YARD_SIZE / 2 - 5.5) < 7
+            || Math.abs(x + YARD_SIZE / 2 + 30) < 5;
+        if (blocked) { mesh.setMatrixAt(slot, hidden); continue; }
         const sc = 0.85 + h1 * 1.1;
         d.position.set(x, getElevation(x, z) - 0.4, z);
         d.rotation.set(0, h1 * Math.PI * 2, 0);
@@ -2002,40 +2014,146 @@ function buildTreeline() {
     }
 }
 
-// Rough grass in the band just outside the fence. Without it the lawn ends at a
-// hard shelf; with it the mown plot reads as a plot cut out of wilder ground.
-function buildMeadow(grassMat) {
-    const COUNT = 4200;
-    const mesh = new THREE.InstancedMesh(makeGrassTuftGeometry(4), grassMat, COUNT);
-    mesh.receiveShadow = true; mesh.frustumCulled = false;
+// Ground cover outside the fence. Deliberately NOT lawn tufts: anything that
+// looks like the grass inside the fence reads as mowable, and it isn't. Bushes,
+// ferns, fallen logs, rocks and wildflower clumps say "scenery" instead.
+function buildOutsideScenery() {
+    const INNER = YARD_SIZE / 2 + 2.2, OUTER = 108;
+    // Keeps the house plot, the garden path, the shed and the pole line clear.
+    const blocked = (x, z) => (z < -YARD_SIZE / 2 && Math.abs(x) < 17 && z > -46)
+        || Math.hypot(x + YARD_SIZE / 2 + 6.5, z - YARD_SIZE / 2 - 5.5) < 5.5
+        || Math.abs(x + YARD_SIZE / 2 + 30) < 3.5;
 
-    const d = new THREE.Object3D(), tint = new THREE.Color();
-    const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
-    const inner = YARD_SIZE / 2 + 1.2, outer = YARD_SIZE / 2 + 15;
-    for (let i = 0; i < COUNT; i++) {
-        const h1 = deterministicHash(i * 1.37 + 0.11, i * 0.61 - 3.3);
-        const h2 = deterministicHash(i * 2.71 - 4.2, i * 1.93 + 7.1);
-        const h3 = deterministicHash(i * 0.83 + 12.5, i * 3.47 - 0.9);
-        const ang = h1 * Math.PI * 2;
-        // sqrt keeps the ring evenly covered instead of bunching at the inner edge
-        const rad = Math.sqrt(inner * inner + h2 * (outer * outer - inner * inner));
-        const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
-        // Keep the house plot, its path and the shed clear.
-        const nearHouse = z < -YARD_SIZE / 2 && Math.abs(x) < 12;
-        const nearShed  = Math.hypot(x + YARD_SIZE / 2 + 6.5, z - YARD_SIZE / 2 - 5.5) < 4.5;
-        if (nearHouse || nearShed) { mesh.setMatrixAt(i, hidden); continue; }
-        const spread = 1.3 + h3 * 0.9;
-        d.position.set(x, getElevation(x, z) - 0.1, z);
-        d.rotation.set(0, h3 * Math.PI * 2, 0);
-        d.scale.set(spread, 1.4 + h1 * 1.0, spread);
-        d.updateMatrix(); mesh.setMatrixAt(i, d.matrix);
-        // Drier and yellower than the watered lawn inside the fence.
-        tint.setHSL(0.19 + h2 * 0.09, 0.36 + h1 * 0.2, 0.26 + h3 * 0.14);
-        mesh.setColorAt(i, tint);
+    // Scatter n points through the annulus, skipping blocked ground.
+    const scatter = (n, seed, innerR, outerR) => {
+        const out = [];
+        for (let i = 0; i < n; i++) {
+            const h1 = deterministicHash(i * 1.37 + seed, i * 0.61 - seed * 2);
+            const h2 = deterministicHash(i * 2.71 - seed, i * 1.93 + seed * 3);
+            const h3 = deterministicHash(i * 0.83 + seed * 5, i * 3.47 - seed);
+            const ang = h1 * Math.PI * 2;
+            // sqrt keeps the ring evenly covered instead of bunching at the inside
+            const rad = Math.sqrt(innerR * innerR + h2 * (outerR * outerR - innerR * innerR));
+            const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
+            if (!blocked(x, z)) out.push([x, z, h1, h2, h3]);
+        }
+        return out;
+    };
+
+    const place = (geo, mat, spots, fn) => {
+        const mesh = new THREE.InstancedMesh(geo, mat, spots.length);
+        mesh.castShadow = false; mesh.receiveShadow = true; mesh.frustumCulled = false;
+        const d = new THREE.Object3D(), tint = new THREE.Color();
+        spots.forEach((spot, i) => {
+            fn(d, tint, ...spot);
+            d.updateMatrix();
+            mesh.setMatrixAt(i, d.matrix);
+            mesh.setColorAt(i, tint);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        yardEnvironmentGroup.add(mesh);
+        return mesh;
+    };
+
+    const foliageMat = new THREE.MeshStandardMaterial({
+        map: makeTex('foliage', 256, drawFoliage), roughness: 1, flatShading: true,
+    });
+    const barkMat = new THREE.MeshStandardMaterial({
+        map: makeTex('bark', 256, drawBark),
+        normalMap: makeNormalTex('bark', 256, drawBark, 2.6), roughness: 1,
+    });
+    const rockMat = new THREE.MeshStandardMaterial({ roughness: 0.92, flatShading: true });
+
+    // --- bushes: the main filler ---
+    const bushGeo = uvScale(new THREE.IcosahedronGeometry(1, 1), 2.4, 2.4);
+    place(bushGeo, foliageMat, scatter(1200, 3, INNER, OUTER),
+          (d, tint, x, z, h1, h2, h3) => {
+              const r = 0.8 + h3 * 1.5;
+              d.position.set(x, getElevation(x, z) + r * 0.45, z);
+              d.rotation.set((h1 - 0.5) * 0.5, h2 * 6.3, (h3 - 0.5) * 0.5);
+              d.scale.set(r * (1 + h1 * 0.5), r * (0.65 + h2 * 0.4), r * (1 + h2 * 0.5));
+              tint.setHSL(0.26 + h2 * 0.08, 0.45 + h1 * 0.3, 0.6 + h3 * 0.4);
+          });
+
+    // A flatter, wider layer hugging the ground. This is what stops the field
+    // outside the fence reading as bare fairway with props standing on it.
+    const scrubGeo = uvScale(new THREE.IcosahedronGeometry(1, 0), 2.4, 2.4);
+    place(scrubGeo, foliageMat, scatter(1500, 71, INNER - 1, OUTER),
+          (d, tint, x, z, h1, h2, h3) => {
+              // Small and flat: scrub, not boulders.
+              const r = 0.55 + h2 * 0.85;
+              d.position.set(x, getElevation(x, z) + r * 0.1, z);
+              d.rotation.set((h3 - 0.5) * 0.2, h1 * 6.3, (h2 - 0.5) * 0.2);
+              d.scale.set(r * 1.5, r * 0.32, r * 1.5);
+              tint.setHSL(0.25 + h1 * 0.07, 0.4 + h3 * 0.25, 0.5 + h2 * 0.32);
+          });
+
+    // --- ferns: a low cluster of fronds ---
+    place(makeFernGeometry(), foliageMat, scatter(900, 11, INNER, OUTER * 0.7),
+          (d, tint, x, z, h1, h2, h3) => {
+              d.position.set(x, getElevation(x, z), z);
+              d.rotation.set(0, h1 * 6.3, 0);
+              d.scale.set(0.9 + h3 * 0.9, 0.7 + h2 * 0.6, 0.9 + h3 * 0.9);
+              tint.setHSL(0.25 + h2 * 0.06, 0.45, 0.72 + h1 * 0.26);
+          });
+
+    // --- fallen logs ---
+    place(uvScale(new THREE.CylinderGeometry(0.34, 0.42, 4.4, 7), 1.6, 3), barkMat,
+          scatter(45, 23, INNER + 4, OUTER * 0.8),
+          (d, tint, x, z, h1, h2, h3) => {
+              d.position.set(x, getElevation(x, z) + 0.3, z);
+              d.rotation.set(Math.PI / 2 + (h3 - 0.5) * 0.14, h1 * 6.3, 0);
+              d.scale.set(0.8 + h2 * 0.6, 0.7 + h3 * 0.7, 0.8 + h2 * 0.6);
+              tint.setHSL(0.09, 0.3, 0.5 + h2 * 0.3);
+          });
+
+    // --- rocks and boulders ---
+    place(new THREE.DodecahedronGeometry(1, 0), rockMat,
+          scatter(160, 37, INNER + 2, OUTER * 0.85),
+          (d, tint, x, z, h1, h2, h3) => {
+              const r = 0.35 + h3 * 1.2;
+              d.position.set(x, getElevation(x, z) + r * 0.25, z);
+              d.rotation.set(h1 * 3, h2 * 6.3, h3 * 3);
+              d.scale.set(r * (1 + h1 * 0.4), r * (0.6 + h2 * 0.5), r * (1 + h2 * 0.4));
+              tint.setHSL(0.08 + h2 * 0.05, 0.06 + h1 * 0.06, 0.38 + h3 * 0.24);
+          });
+
+    // --- wildflower clumps ---
+    const flowerMat = new THREE.MeshStandardMaterial({ roughness: 0.65, side: THREE.DoubleSide, vertexColors: true });
+    place(makeFlowerGeometry(), flowerMat, scatter(420, 53, INNER, OUTER * 0.55),
+          (d, tint, x, z, h1, h2, h3) => {
+              d.position.set(x, getElevation(x, z), z);
+              d.rotation.set((h2 - 0.5) * 0.25, h1 * 6.3, (h3 - 0.5) * 0.25);
+              d.scale.setScalar(0.9 + h3 * 0.7);
+              tint.setHSL((h3 < 0.4 ? 0.13 + h1 * 0.05 : (h3 < 0.75 ? 0.74 + h1 * 0.1 : 0.02 + h1 * 0.04)) % 1,
+                          0.7, 0.6 + h2 * 0.2);
+          });
+}
+
+// A few arching fronds from a common root — low ground cover that reads as
+// undergrowth rather than something you could run a mower over.
+function makeFernGeometry() {
+    const parts = [];
+    for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 0.4;
+        const frond = new THREE.ConeGeometry(0.16, 1.0, 4);
+        frond.scale(1, 1, 0.22);
+        frond.rotateX(Math.PI / 2);
+        frond.rotateZ(-0.75);
+        frond.rotateY(a);
+        frond.translate(Math.cos(a) * 0.2, 0.32, Math.sin(a) * 0.2);
+        parts.push([frond, 0xFFFFFF]);     // instanceColor supplies the hue
     }
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    yardEnvironmentGroup.add(mesh);
+    const geo = mergeColored(parts);
+    geo.deleteAttribute('color');
+    // mergeColored drops UVs, so give the foliage map something to sample.
+    const n = geo.attributes.position.count;
+    const uv = new Float32Array(n * 2);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < n; i++) { uv[i * 2] = pos.getX(i) * 1.5 + 0.5; uv[i * 2 + 1] = pos.getY(i) * 1.5; }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return geo;
 }
 
 // ---------------------------------------------------------------------------
@@ -2086,9 +2204,14 @@ function buildNeighbourhood() {
         b.add(sidingMat, body, ...at(0, WALL / 2 - 0.6, 0), 0, rot, 0);
 
         for (const dir of [1, -1]) {
+            // Both the offset and the tilt have to carry the house's yaw, or the
+            // two slopes meet in the middle instead of at the ridge.
             b.add(roofMat, uvScale(box(W + 1, 0.28, slope), (W + 1) / 2.2, slope / 2.2),
-                  ...at(0, WALL - 0.6 + RISE / 2, dir * run / 2), dir * pitch, 0, 0);
+                  ...at(0, WALL - 0.6 + RISE / 2, dir * run / 2), dir * pitch, rot, 0);
         }
+        // Ridge cap closing the join
+        b.add(roofMat, uvScale(box(W + 1, 0.22, 0.4), 4, 1),
+              ...at(0, WALL - 0.6 + RISE + 0.05, 0), 0, rot, 0);
         // Gable ends
         const gable = new THREE.Shape();
         gable.moveTo(-D / 2, 0); gable.lineTo(D / 2, 0); gable.lineTo(0, RISE); gable.closePath();
@@ -2241,33 +2364,55 @@ function buildPicketFence() {
     const GATE_HALF = 1.25;
     const inGate = (t, fixed, alongX) => alongX && fixed < 0 && Math.abs(t) < GATE_HALF;
 
-    // Picket profile: a plank with a pointed cap.
+    // A real fence is built level and lets the ground fall away beneath it, so
+    // every picket top, rail and post sits at one world Y. Sample the perimeter
+    // first to find how far the ground drops, then make the pickets long enough
+    // to stay buried at the low corners.
+    let groundMin = Infinity, groundMax = -Infinity;
+    const sides = [[-half, 0, true], [half, Math.PI, true], [-half, Math.PI / 2, false], [half, -Math.PI / 2, false]];
+    const perSide = Math.floor(YARD_SIZE / SPACING);
+    for (const [fixed, , alongX] of sides) {
+        for (let i = 0; i <= perSide; i++) {
+            const t = -YARD_SIZE / 2 + i * SPACING;
+            const e = getElevation(alongX ? t : fixed, alongX ? fixed : t);
+            if (e < groundMin) groundMin = e;
+            if (e > groundMax) groundMax = e;
+        }
+    }
+    for (const px of [-half, half]) for (const pz of [-half, half]) {
+        const e = getElevation(px, pz);
+        if (e < groundMin) groundMin = e;
+        if (e > groundMax) groundMax = e;
+    }
+    const fenceTopY = groundMax + FENCE_H;       // one level line for the whole run
+    const drop = (groundMax - groundMin) + 0.6;  // how far below grade the pickets must reach
+
+    // Picket profile: a plank with a pointed cap, built with its tip at y = 0 and
+    // running downward, so placing it is just "top goes here".
     const sh = new THREE.Shape();
-    sh.moveTo(-PICKET_W, 0); sh.lineTo(PICKET_W, 0); sh.lineTo(PICKET_W, FENCE_H - 0.17);
+    sh.moveTo(-PICKET_W, -drop); sh.lineTo(PICKET_W, -drop); sh.lineTo(PICKET_W, FENCE_H - 0.17);
     sh.lineTo(0, FENCE_H); sh.lineTo(-PICKET_W, FENCE_H - 0.17); sh.closePath();
     const picketGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: false });
-    picketGeo.translate(0, 0, -0.025);
+    picketGeo.translate(0, -FENCE_H, -0.025);
 
     const paintMat = new THREE.MeshStandardMaterial({ color: 0xF2EEDF, roughness: 0.85 });
     const railMat  = new THREE.MeshStandardMaterial({ color: 0xE4DFCB, roughness: 0.9 });
 
-    const perSide = Math.floor(YARD_SIZE / SPACING);
     const picketMesh = new THREE.InstancedMesh(picketGeo, paintMat, perSide * 4);
     picketMesh.castShadow = true; picketMesh.receiveShadow = true; picketMesh.frustumCulled = false;
 
     const d = new THREE.Object3D();
     const tint = new THREE.Color();
     let n = 0;
-    // sides: [fixed axis value, rotation, whether the run is along x]
-    const sides = [[-half, 0, true], [half, Math.PI, true], [-half, Math.PI / 2, false], [half, -Math.PI / 2, false]];
     for (const [fixed, rot, alongX] of sides) {
         for (let i = 0; i < perSide; i++) {
             const t = -YARD_SIZE / 2 + (i + 0.5) * SPACING;
             if (inGate(t, fixed, alongX)) continue;
             const x = alongX ? t : fixed, z = alongX ? fixed : t;
-            d.position.set(x, getElevation(x, z) - 0.12, z);
-            d.rotation.set(0, rot + (deterministicHash(i, fixed) - 0.5) * 0.05, 0);
-            d.scale.set(1, 0.94 + deterministicHash(i + 31, fixed) * 0.12, 1);
+            // No per-picket height or angle jitter: the run has to read level.
+            d.position.set(x, fenceTopY, z);
+            d.rotation.set(0, rot, 0);
+            d.scale.set(1, 1, 1);
             d.updateMatrix();
             picketMesh.setMatrixAt(n, d.matrix);
             // Weathered paint: a little per-picket variation stops it reading as plastic.
@@ -2276,6 +2421,7 @@ function buildPicketFence() {
             n++;
         }
     }
+    picketMesh.count = n;
     picketMesh.instanceMatrix.needsUpdate = true;
     if (picketMesh.instanceColor) picketMesh.instanceColor.needsUpdate = true;
     yardEnvironmentGroup.add(picketMesh);
@@ -2288,11 +2434,11 @@ function buildPicketFence() {
     for (const [fixed, , alongX] of sides) {
         const gated = alongX && fixed < 0;
         const offsets = gated ? [-(GATE_HALF + halfSpan / 2), GATE_HALF + halfSpan / 2] : [0];
-        for (const ry of [0.34, 0.92]) {
+        for (const dropY of [0.42, 1.0]) {
             for (const off of offsets) {
                 const rail = new THREE.Mesh(gated ? splitRail : fullRail, railMat);
                 const x = alongX ? off : fixed, z = alongX ? fixed : off;
-                rail.position.set(x, getElevation(x, z) + ry, z);
+                rail.position.set(x, fenceTopY - dropY, z);
                 rail.rotation.y = alongX ? 0 : Math.PI / 2;
                 rail.castShadow = true; rail.receiveShadow = true;
                 yardEnvironmentGroup.add(rail);
@@ -2300,11 +2446,13 @@ function buildPicketFence() {
         }
     }
 
-    buildGate(-half, GATE_HALF, FENCE_H, paintMat);
-    const postGeo = new THREE.BoxGeometry(0.17, FENCE_H + 0.3, 0.17);
+    buildGate(-half, GATE_HALF, fenceTopY, drop, paintMat);
+
+    const postH = FENCE_H + 0.3 + drop;
+    const postGeo = new THREE.BoxGeometry(0.17, postH, 0.17);
     for (const px of [-half, half]) for (const pz of [-half, half]) {
         const post = new THREE.Mesh(postGeo, paintMat);
-        post.position.set(px, getElevation(px, pz) + (FENCE_H + 0.3) / 2 - 0.15, pz);
+        post.position.set(px, fenceTopY + 0.16 - postH / 2, pz);
         post.castShadow = true; post.receiveShadow = true;
         yardEnvironmentGroup.add(post);
     }
@@ -2312,22 +2460,22 @@ function buildPicketFence() {
 
 // The gate itself: two taller posts, a braced picket leaf standing ajar, and an
 // arbour over the top. It's what turns the fence from a boundary into a way in.
-function buildGate(fenceZ, gateHalf, fenceH, paintMat) {
+function buildGate(fenceZ, gateHalf, fenceTopY, drop, paintMat) {
     const g = new THREE.Group();
-    g.position.set(0, getElevation(0, fenceZ), fenceZ);
+    g.position.set(0, fenceTopY, fenceZ);      // everything below is relative to the fence line
     yardEnvironmentGroup.add(g);
 
     const b = partBuilder();
     const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-    const postH = fenceH + 1.5;
+    const postH = 1.7 + drop;
     for (const sx of [-1, 1]) {
-        b.add(paintMat, box(0.22, postH, 0.22), sx * (gateHalf + 0.11), postH / 2 - 0.3, 0);
-        b.add(paintMat, box(0.3, 0.16, 0.3), sx * (gateHalf + 0.11), postH - 0.24, 0);   // post cap
+        b.add(paintMat, box(0.22, postH, 0.22), sx * (gateHalf + 0.11), 0.36 - postH / 2, 0);
+        b.add(paintMat, box(0.3, 0.16, 0.3), sx * (gateHalf + 0.11), 0.42, 0);   // post cap
     }
     // Arbour beam across the top
-    b.add(paintMat, box(gateHalf * 2 + 0.8, 0.16, 0.22), 0, fenceH + 0.95, 0);
+    b.add(paintMat, box(gateHalf * 2 + 0.8, 0.16, 0.22), 0, 0.2, 0);
     for (let i = -2; i <= 2; i++) {
-        b.add(paintMat, box(0.12, 0.12, 1.5), i * 0.5, fenceH + 1.08, 0);                 // slats
+        b.add(paintMat, box(0.12, 0.12, 1.5), i * 0.5, 0.33, 0);                 // slats
     }
     b.build(g);
 
@@ -2337,13 +2485,13 @@ function buildGate(fenceZ, gateHalf, fenceH, paintMat) {
     leaf.rotation.y = -0.45;
     g.add(leaf);
     const lb = partBuilder();
-    const W = gateHalf * 2 - 0.1;
+    const W = gateHalf * 2 - 0.1, H = 1.1;
     for (let i = 0; i < 6; i++) {
-        lb.add(paintMat, box(0.11, fenceH * 0.82, 0.045), 0.18 + i * (W - 0.3) / 5, fenceH * 0.41 - 0.1, 0);
+        lb.add(paintMat, box(0.11, H, 0.045), 0.18 + i * (W - 0.3) / 5, -0.22 - H / 2, 0);
     }
-    for (const ry of [0.28, fenceH * 0.72]) lb.add(paintMat, box(W - 0.15, 0.1, 0.06), W / 2, ry, 0.03);
-    lb.add(paintMat, box(Math.hypot(W - 0.15, fenceH * 0.44), 0.09, 0.05),
-           W / 2, fenceH * 0.5 - 0.1, 0.03, 0, 0, Math.atan2(fenceH * 0.44, W - 0.15));   // diagonal brace
+    for (const ry of [-0.34, -1.06]) lb.add(paintMat, box(W - 0.15, 0.1, 0.06), W / 2, ry, 0.03);
+    lb.add(paintMat, box(Math.hypot(W - 0.15, 0.72), 0.09, 0.05),
+           W / 2, -0.7, 0.03, 0, 0, Math.atan2(0.72, W - 0.15));                 // diagonal brace
     lb.build(leaf);
 }
 
