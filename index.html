@@ -1,16 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>Yard Master</title>
-    
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -20,6 +9,18 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; display: block; }
+        /* Darkened corners + a faint warm centre: costs nothing and stops the
+           render reading as a flat rectangle of colour. */
+        #vignette {
+            /* z-index:0 (not auto) keeps it above the static canvas, while still
+               painting under #ui-layer, #shop-modal and #title-screen, which come
+               later in the DOM. A positive z-index here would dim the HUD. */
+            position: absolute; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse at 50% 42%, rgba(255,238,200,0.10) 0%, rgba(255,238,200,0) 45%),
+                radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.20) 78%, rgba(0,0,0,0.42) 100%);
+            opacity: 0; transition: opacity 1.2s ease;
+        }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         .pointer-auto { pointer-events: auto; }
         #shop-modal { transition: opacity 0.3s ease; }
@@ -34,26 +35,19 @@
             font-style: italic;
             letter-spacing: -0.02em;
         }
-        .title-cloud { position: absolute; width: 190px; height: 62px; background: #fff; border-radius: 60px; filter: blur(5px); opacity: 0.9; animation: drift linear infinite; pointer-events: none; }
-        .title-cloud::before { content: ''; position: absolute; width: 95px; height: 95px; background: #fff; border-radius: 50%; top: -38px; left: 48px; }
-        @keyframes drift { from { transform: translateX(0); } to { transform: translateX(145vw); } }
         .mode-btn { transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .mode-btn:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 14px 30px rgba(0,0,0,0.3); }
         .mode-btn:active { transform: translateY(0) scale(0.98); }
-        @media (prefers-reduced-motion: reduce) { .title-cloud { animation: none; } }
     </style>
 </head>
 <body>
 
 <div id="canvas-container"></div>
+<div id="vignette"></div>
 
 <!-- ===================== TITLE SCREEN ===================== -->
 <div id="title-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center text-center overflow-hidden"
-     style="background: linear-gradient(to bottom, #5fa8e6 0%, #a8dcf5 48%, #8fd066 48.3%, #3f8a2e 100%);">
-    <div style="position:absolute; top:7%; right:10%; width:140px; height:140px; border-radius:50%; background:radial-gradient(circle, #fffbe0 0%, #ffe066 45%, rgba(255,224,102,0) 72%);"></div>
-    <div class="title-cloud" style="top:11%; left:-240px; animation-duration:60s;"></div>
-    <div class="title-cloud" style="top:25%; left:-420px; animation-duration:85s;"></div>
-    <div style="position:absolute; top:50%; left:0; width:100%; height:90px; transform:translateY(-90%); background:rgba(255,255,255,0.14);"></div>
+     style="background: linear-gradient(to bottom, rgba(8,22,40,0.52) 0%, rgba(8,22,40,0.30) 26%, rgba(6,20,10,0.34) 62%, rgba(4,16,8,0.68) 100%);">
 
     <h1 id="game-title" class="text-6xl sm:text-8xl text-white relative z-10" style="text-shadow: 0 5px 0 rgba(0,0,0,0.22), 0 12px 24px rgba(0,0,0,0.25);">Yard Master 3D</h1>
     <p class="text-white/95 font-bold mt-3 mb-10 text-lg sm:text-xl relative z-10" style="text-shadow:0 2px 4px rgba(0,0,0,0.3);">One perfect summer. Infinite grass.</p>
@@ -69,8 +63,13 @@
         </button>
     </div>
 
-    <div class="mt-10 text-white/90 text-xs sm:text-sm font-bold relative z-10 bg-black/25 px-5 py-2 rounded-full">
-        WASD / Arrows — Drive &nbsp;•&nbsp; Drag — Camera &nbsp;•&nbsp; E — Shop &nbsp;•&nbsp; Space — Action &nbsp;•&nbsp; Esc — Menu
+    <div class="mt-10 flex flex-col gap-2 items-center relative z-10">
+        <div class="text-white/95 text-xs sm:text-sm font-bold bg-black/35 px-5 py-2 rounded-full backdrop-blur-sm">
+            WASD / Arrows — Drive &nbsp;•&nbsp; Drag — Camera &nbsp;•&nbsp; Scroll — Zoom &nbsp;•&nbsp; E — Shop &nbsp;•&nbsp; Space — Action &nbsp;•&nbsp; Esc — Menu
+        </div>
+        <div class="text-white/80 text-[10px] sm:text-xs font-bold bg-black/25 px-5 py-1.5 rounded-full backdrop-blur-sm">
+            Pickups: G — Laser &nbsp;•&nbsp; H — Water &nbsp;•&nbsp; T — Torch &nbsp;•&nbsp; O — Day/Night &nbsp;•&nbsp; B — Hover &nbsp;•&nbsp; R — Call a shower
+        </div>
     </div>
 </div>
 
@@ -197,6 +196,9 @@
 // =============================================================================
 const YARD_SIZE        = 40;
 const GRASS_STEP       = 0.5;
+const GRASS_BLADE_HEIGHT = 0.46;                 // world height of an uncut tuft
+const GRASS_TUFT_RADIUS  = GRASS_STEP * 0.5;     // blades fan out to the cell edge
+const MOWED_SCALE_Y      = 0.3;                  // cut stubble — short, but still legible
 const GRASS_GRID_SIZE  = Math.floor(YARD_SIZE / GRASS_STEP);
 const YARD_GRASS_COUNT = GRASS_GRID_SIZE * GRASS_GRID_SIZE;
 
@@ -227,6 +229,16 @@ const POOL_X = -9, POOL_Z = 11;
 const BBQ_X = 9, BBQ_Z = 13;
 
 const _bugUpAxis = new THREE.Vector3(0, 1, 0);
+const _grassUp   = new THREE.Vector3(0, 1, 0);
+
+// Wind is a single shared field: the grass shader reads it on the GPU and the
+// trees, pollen and clouds read the same numbers on the CPU, so everything in
+// the yard leans the same way at the same moment.
+const grassUniforms = {
+    uTime:         { value: 0 },
+    uWindDir:      { value: new THREE.Vector2(0.82, 0.57) },
+    uWindStrength: { value: 1.0 },
+};
 function cellKey(wx, wz) { return wx * 1000003 + wz; }
 const _tempColor   = new THREE.Color();
 const _ballRotAxis = new THREE.Vector3();
@@ -269,7 +281,7 @@ const upgrades = {
 // THREE.JS CORE
 // =============================================================================
 let scene, camera, renderer, ambientLight, dirLight;
-let mowerGroup, mowerBodyMesh;
+let mowerGroup, mowerBodyMesh, mowerBlade = null, mowerDeck = null, mowerWheels = [];
 let headlights = [];
 let golfLightRef = null;
 let yardGrassMesh, infGrassMesh, grassMesh, weedMesh;
@@ -277,7 +289,7 @@ let yardGrassStates  = new Uint8Array(YARD_GRASS_COUNT);
 let yardGrassWatered = new Float32Array(YARD_GRASS_COUNT);
 let yardWeedStates   = new Uint16Array(YARD_GRASS_COUNT);
 let particleMesh, particlesData = [];
-let bugMesh, bugsData = [];
+let bugMesh, bugsData = [], fireflyGlowMesh = null;
 let activeParticleCount = 0;
 let cloudGroup, cloudMat, sunMesh, moonMesh, pollenMesh, pollenData = [];
 let starField;
@@ -290,6 +302,7 @@ let poolBall = null, bbqGrill = null;
 let yardBlocked = new Uint8Array(YARD_GRASS_COUNT); // cells hidden under obstacles — never regrow these
 
 // Critters
+let bigTree = null, tireSwing = null;
 let squirrel = null;
 const squirrelState = { mode: 'wander', pos: new THREE.Vector3(), target: new THREE.Vector3(), heading: 0, timer: 1, climb: 0, hop: 0 };
 let birds = [];
@@ -330,6 +343,7 @@ let ambientTimer = 0;
 const keys = { forward: false, backward: false, left: false, right: false, water: false };
 const mowerState = { speed: 0, maxSpeed: 8, acceleration: 15, deceleration: 10, rotationSpeed: 3, heading: 0, prevX: 0, prevZ: 0 };
 let camDistance = 12, camYaw = 0, camPitch = 0.5;
+const _camDesired = new THREE.Vector3();
 let isDraggingCam = false;
 let prevMousePos = { x: 0, y: 0 };
 
@@ -340,13 +354,29 @@ const DAY_CYCLE_DURATION = 1500;
 let dayNightTime = DAY_CYCLE_DURATION * 0.5;
 let isNightTime = false, currentHlIntensity = 0;
 const colorDaySky      = new THREE.Color(0x87CEEB);
-const colorSunsetSky   = new THREE.Color(0xFF7F50);
-const colorNightSky    = new THREE.Color(0x0B0B1A);
 const colorSunLight    = new THREE.Color(0xffffff);
 const colorSunsetLight = new THREE.Color(0xffa500);
-const colorMoonLight   = new THREE.Color(0x445588);
+const colorMoonLight   = new THREE.Color(0x8098CF);
 const _dnSky   = new THREE.Color();   // day/night scratch — never shared with grass/bug color code
 const _dnLight = new THREE.Color();
+const _dnZenith = new THREE.Color(), _dnGround = new THREE.Color(), _dnHemi = new THREE.Color(), _dnCloud = new THREE.Color();
+
+// Sky dome: zenith / horizon / below-horizon colours per phase of the day.
+let skyDome = null;
+const SKY_RADIUS = 220;
+const skyUniforms = {
+    uZenith:       { value: new THREE.Color(0x2E6FD0) },
+    uHorizon:      { value: new THREE.Color(0xBFE2F7) },
+    uGround:       { value: new THREE.Color(0x4A6B47) },
+    uSunDir:       { value: new THREE.Vector3(0, 1, 0) },
+    uSunColor:     { value: new THREE.Color(0xFFF3D0) },
+    uSunIntensity: { value: 1 },
+};
+const SKY = {
+    day:    { zenith: new THREE.Color(0x2F72D4), horizon: new THREE.Color(0xC3E4F8), ground: new THREE.Color(0x52734A), hemi: new THREE.Color(0xBFE3FF), cloud: new THREE.Color(0xFFFFFF) },
+    sunset: { zenith: new THREE.Color(0x2B3E7A), horizon: new THREE.Color(0xFFA057), ground: new THREE.Color(0x4A3A2E), hemi: new THREE.Color(0xFFC08A), cloud: new THREE.Color(0xFFC39A) },
+    night:  { zenith: new THREE.Color(0x060B24), horizon: new THREE.Color(0x1B2C52), ground: new THREE.Color(0x141E33), hemi: new THREE.Color(0x6A87C4), cloud: new THREE.Color(0x44537F) },
+};
 const _obsColor = new THREE.Color();  // scratch for instanced rock/stump tints
 
 // =============================================================================
@@ -364,7 +394,6 @@ let isDetectorMode = false;
 let detectorGroup, detectorMesh, detectorLight;
 let detectorState = { pos: new THREE.Vector3(), heading: 0, speed: 0 };
 let buriedTreasures = [];
-const worldTreasureMap = new Map();
 let currentClosestTreasure = null, currentClosestDist = Infinity, detectorBeepTimer = 0;
 
 let isBasketballMode = false;
@@ -408,7 +437,7 @@ function getGrassHeight(x, z) {
             if (yardGrassStates[row * GRASS_GRID_SIZE + col] === 0) uncut = true;
         }
     }
-    return uncut ? 0.4 : 0;
+    return uncut ? GRASS_BLADE_HEIGHT * 0.7 : 0;
 }
 
 function getRcElevationWithJumps(x, z) {
@@ -429,6 +458,12 @@ function getRcElevationWithJumps(x, z) {
 function deterministicHash(x, z) {
     let n = Math.sin(x * 12.9898 + z * 78.233 + 43.21) * 43758.5453;
     return n - Math.floor(n);
+}
+
+// Mirrors the weed placement in updateInfinityGrid so mowing matches what's drawn.
+function isInfinityWeed(wx, wz) {
+    const h = deterministicHash(wx, wz);
+    return h >= 0.015 && h < 0.025;
 }
 
 // Mirrors the rock/stump placement in updateInfinityGrid so collision matches what's drawn.
@@ -469,13 +504,20 @@ function loadProgress() {
     } catch (e) {}
 }
 
+// Per-tuft colour. A lawn is never one flat green, so every cell gets its own
+// hue and depth. Both inputs are 0..1 hashes of the cell, never Math.random():
+// a patch that regrows has to come back the colour it was, not flicker to a new one.
+function grassTint(target, a, b) {
+    return target.setHSL(0.245 + a * 0.085, 0.38 + b * 0.26, 0.24 + a * 0.15 + b * 0.05);
+}
+
 // Cut-grass color: plain bright green, or alternating ballpark stripes when the Striping Kit is owned.
 function mowedTint(wx, wz) {
     if (upgrades.striping.level > 0) {
-        const band = ((Math.floor(wz / 1.5) % 2) + 2) % 2;
-        return band === 0 ? 0x9CEB5A : 0x5BBE32;
+        const band = ((Math.floor(wz / 1.6) % 2) + 2) % 2;
+        return band === 0 ? 0xC2F587 : 0x4E9A2B;
     }
-    return 0x7CFC00;
+    return 0x8FD94B;
 }
 
 function applyUpgradeEffects() {
@@ -484,7 +526,10 @@ function applyUpgradeEffects() {
     mowerState.acceleration  = 15  + (upgrades.engine.level - 1) * 3;
     mowerState.rotationSpeed = 3   + (upgrades.tires.level  - 1) * 0.6;
     mowerState.deceleration  = 10  + (upgrades.tires.level  - 1) * 3;
-    if (mowerBodyMesh) mowerBodyMesh.scale.x = 1 + (upgrades.deck.level - 1) * 0.15;
+    const deckScale = 1 + (upgrades.deck.level - 1) * 0.15;
+    if (mowerBodyMesh) mowerBodyMesh.scale.x = deckScale;
+    if (mowerDeck)  mowerDeck.scale.x  = deckScale;
+    if (mowerBlade) mowerBlade.scale.x = deckScale;
     const newAngle = Math.PI / 5 + (upgrades.lights.level - 1) * 0.15;
     headlights.forEach(hl => { hl.angle = newAngle; });
     mowCoinChance = 0.04 + (upgrades.bagger.level - 1) * 0.05;
@@ -517,24 +562,38 @@ function init() {
     camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 250);
     camera.position.set(0, 10, 15);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    // Cap at 2x: beyond that the cost is real and the gain isn't visible.
+    maxPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    pixelRatioScale = 1;
+    renderer.setPixelRatio(maxPixelRatio);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Filmic response keeps the midday lawn from blowing out to flat neon green
+    // and gives sunset and night a much wider tonal range to play with.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
     container.appendChild(renderer.domElement);
 
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // Sky-blue ambient from above, grass-green bounce from below — the single
+    // cheapest thing that makes the yard feel like it's outdoors.
+    ambientLight = new THREE.HemisphereLight(0xBFE3FF, 0x3C6B2E, 0.5);
     scene.add(ambientLight);
 
-    dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.left = -25; dirLight.shadow.camera.right = 25;
-    dirLight.shadow.camera.top = 25; dirLight.shadow.camera.bottom = -25;
+    dirLight.shadow.camera.left = -28; dirLight.shadow.camera.right = 28;
+    dirLight.shadow.camera.top = 28; dirLight.shadow.camera.bottom = -28;
     dirLight.shadow.camera.far = 150;
+    dirLight.shadow.bias = -0.0006;
+    dirLight.shadow.normalBias = 0.03;
+    dirLight.shadow.radius = 2;
     scene.add(dirLight);
     scene.add(dirLight.target);
 
+    buildSkyDome();
     buildStaticEnvironment();
     buildItemsAndPowerups();
     buildMower();
@@ -545,6 +604,10 @@ function init() {
     buildRcCar();
     buildBasketball();
     setupInput();
+
+    // Seed a yard immediately: the title screen renders the real scene behind it.
+    populateYard(true);
+    updateTitleCamera(0);
 
     document.getElementById('coin-text').innerText = `🪙 ${coins}`;
     window.addEventListener('resize', onWindowResize);
@@ -600,6 +663,7 @@ function startGame(mode) {
     title.style.opacity = '0';
     setTimeout(() => { title.style.display = 'none'; }, 500);
     document.getElementById('ui-layer').style.opacity = '1';
+    document.getElementById('vignette').style.opacity = '1';
 
     lastTime = performance.now();
     isGameRunning = true;
@@ -619,6 +683,7 @@ function returnToMenu() {
     }
 
     document.getElementById('ui-layer').style.opacity = '0';
+    document.getElementById('vignette').style.opacity = '0';
     const title = document.getElementById('title-screen');
     title.style.display = 'flex';
     requestAnimationFrame(() => { title.style.opacity = '1'; });
@@ -729,7 +794,295 @@ function playCoinBlip() {
     o.start(t0); o.stop(t0 + 0.1);
 }
 // =============================================================================
-// ENVIRONMENT BUILDING
+// GRASS — tuft geometry + wind material
+// =============================================================================
+// Every lawn cell is one instance of a small tuft: a handful of tapered blades
+// fanned around the cell centre. The blades bend in a shared wind field that is
+// evaluated per-vertex on the GPU, so a 6400-tuft lawn still costs one draw call
+// and zero per-frame CPU work.
+
+// Small deterministic PRNG so the tuft shapes are stable between reloads.
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// A camera-locked dome with a zenith-to-horizon gradient and a sun glow baked
+// into the fragment shader. Replaces the flat background colour, and gives the
+// day/night cycle something worth looking at.
+function buildSkyDome() {
+    const geo = new THREE.SphereGeometry(SKY_RADIUS, 32, 20);
+    const mat = new THREE.ShaderMaterial({
+        side: THREE.BackSide, depthWrite: false, fog: false,
+        uniforms: skyUniforms,
+        vertexShader: `
+            varying vec3 vDir;
+            void main() {
+                // The dome is camera-locked and unrotated, so the object-space
+                // direction is already the view direction.
+                vDir = normalize(position);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }`,
+        fragmentShader: `
+            uniform vec3  uZenith;
+            uniform vec3  uHorizon;
+            uniform vec3  uGround;
+            uniform vec3  uSunDir;
+            uniform vec3  uSunColor;
+            uniform float uSunIntensity;
+            varying vec3 vDir;
+            void main() {
+                vec3 d = normalize(vDir);
+                float h = d.y;
+                // Tight falloff near the horizon, long gradient up to the zenith.
+                float up = pow(smoothstep(0.0, 1.0, max(h, 0.0)), 0.42);
+                vec3 col = mix(uHorizon, uZenith, up);
+                col = mix(col, uGround, smoothstep(0.0, -0.22, h));
+
+                float sd = max(dot(d, uSunDir), 0.0);
+                col += uSunColor * pow(sd, 220.0) * uSunIntensity * 1.6;   // disc
+                col += uSunColor * pow(sd, 7.0)   * uSunIntensity * 0.35;  // near halo
+                col += uSunColor * pow(sd, 1.6)   * uSunIntensity * 0.10;  // broad bloom
+                gl_FragColor = vec4(col, 1.0);
+            }`,
+    });
+    skyDome = new THREE.Mesh(geo, mat);
+    skyDome.frustumCulled = false;
+    skyDome.renderOrder = -1000;
+    scene.add(skyDome);
+}
+
+// Minimal geometry merge (three's BufferGeometryUtils lives in /examples, which
+// this single-file build doesn't pull in). Bakes each part's colour into vertex
+// colours so a whole prop draws with one material.
+function mergeColored(parts) {
+    const pos = [], nrm = [], col = [];
+    const c = new THREE.Color();
+    for (const [geo, hex] of parts) {
+        const g = geo.index ? geo.toNonIndexed() : geo;
+        const gp = g.attributes.position, gn = g.attributes.normal;
+        c.set(hex);
+        for (let i = 0; i < gp.count; i++) {
+            pos.push(gp.getX(i), gp.getY(i), gp.getZ(i));
+            nrm.push(gn.getX(i), gn.getY(i), gn.getZ(i));
+            col.push(c.r, c.g, c.b);
+        }
+        if (g !== geo) g.dispose();
+        geo.dispose();
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    out.setAttribute('normal',   new THREE.Float32BufferAttribute(nrm, 3));
+    out.setAttribute('color',    new THREE.Float32BufferAttribute(col, 3));
+    return out;
+}
+
+// A dandelion: ragged basal leaves, a stem, and a ruff of petals around a
+// yellow centre. Reads as a weed you want gone, which gold nuggets never did.
+function makeDandelionGeometry() {
+    const parts = [];
+    const stem = new THREE.CylinderGeometry(0.012, 0.022, 0.34, 5);
+    stem.translate(0, 0.17, 0);
+    parts.push([stem, 0x5E8C3A]);
+
+    for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.4;
+        const leaf = new THREE.ConeGeometry(0.055, 0.24, 4);
+        leaf.scale(1, 1, 0.3);
+        leaf.rotateX(Math.PI / 2.1);
+        leaf.rotateY(a);
+        leaf.translate(Math.cos(a) * 0.09, 0.05, Math.sin(a) * 0.09);
+        parts.push([leaf, 0x4E7C2E]);
+    }
+
+    for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const petal = new THREE.ConeGeometry(0.03, 0.1, 4);
+        petal.scale(1, 1, 0.45);
+        petal.rotateX(Math.PI / 2);
+        petal.rotateZ(-0.5);
+        petal.rotateY(a);
+        petal.translate(Math.cos(a) * 0.055, 0.365, Math.sin(a) * 0.055);
+        parts.push([petal, i % 2 ? 0xFFD21E : 0xFFC400]);
+    }
+    const head = new THREE.SphereGeometry(0.055, 8, 6);
+    head.scale(1, 0.6, 1);
+    head.translate(0, 0.385, 0);
+    parts.push([head, 0xFFB300]);
+    return mergeColored(parts);
+}
+
+// A distant tree for the hedgerow beyond the fence — trunk plus a few canopy
+// blobs, merged so the whole treeline is a single instanced draw call.
+function makeDistantTreeGeometry() {
+    const parts = [];
+    const trunk = new THREE.CylinderGeometry(0.3, 0.5, 3.2, 6);
+    trunk.translate(0, 1.6, 0);
+    parts.push([trunk, 0x53381F]);
+    const blobs = [[0, 4.4, 0, 1.9], [1.1, 3.9, 0.5, 1.35], [-1.0, 4.0, -0.5, 1.3], [0.2, 5.3, -0.6, 1.1]];
+    for (const [bx, by, bz, bs] of blobs) {
+        const g = new THREE.IcosahedronGeometry(bs, 0);
+        g.translate(bx, by, bz);
+        parts.push([g, 0x2F6B2A]);
+    }
+    return mergeColored(parts);
+}
+
+// A radial falloff sprite, generated rather than loaded so the game stays a
+// single file with no asset fetches.
+function makeGlowTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0.0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1.0, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+}
+
+function makeGrassTuftGeometry(bladeCount) {
+    const SEG = 3;                                   // spine samples per blade
+    const pos = [], nrm = [], col = [], hgt = [], phs = [];
+    const rnd = mulberry32(0x5EED0000 ^ bladeCount);
+    const T = new THREE.Vector3(), W = new THREE.Vector3(), N = new THREE.Vector3();
+
+    for (let b = 0; b < bladeCount; b++) {
+        const yaw   = (b / bladeCount) * Math.PI * 2 + (rnd() - 0.5) * 1.1;
+        const bAng  = rnd() * Math.PI * 2;
+        const bRad  = Math.sqrt(rnd()) * GRASS_TUFT_RADIUS;
+        const bx    = Math.cos(bAng) * bRad, bz = Math.sin(bAng) * bRad;
+        const h     = GRASS_BLADE_HEIGHT * (0.68 + rnd() * 0.6);
+        const wid   = 0.07 + rnd() * 0.05;
+        const lean  = h * (0.28 + rnd() * 0.5);
+        const phase = rnd() * Math.PI * 2;
+        const dirX = Math.cos(yaw), dirZ = Math.sin(yaw);
+        const perpX = -dirZ, perpZ = dirX;
+
+        // Sample the blade's curved spine; half-width tapers to a point at the tip.
+        const ring = [];
+        for (let sg = 0; sg <= SEG; sg++) {
+            const t = sg / SEG, bend = t * t;
+            ring.push({
+                t,
+                x: bx + dirX * lean * bend,
+                y: h * t * (1 - 0.18 * bend),
+                z: bz + dirZ * lean * bend,
+                w: wid * Math.pow(1 - t, 0.65) * 0.5,
+            });
+        }
+
+        // One flat normal per blade, tilted well toward +Y so the lawn reads as a
+        // soft carpet instead of a field of dark vertical slivers.
+        const base = ring[0], tip = ring[SEG];
+        T.set(tip.x - base.x, tip.y - base.y, tip.z - base.z).normalize();
+        W.set(perpX, 0, perpZ);
+        N.crossVectors(T, W).normalize().lerp(_grassUp, 0.6).normalize();
+
+        const push = (r, side) => {
+            pos.push(r.x + perpX * r.w * side, r.y, r.z + perpZ * r.w * side);
+            nrm.push(N.x, N.y, N.z);
+            // Base-to-tip ramp: shaded and cool at the soil, bright and sun-warmed at the tip.
+            const shade = 0.36 + 0.64 * Math.pow(r.t, 0.7);
+            col.push(shade * (1 + 0.14 * r.t), shade * (1 + 0.04 * r.t), shade * (1 - 0.2 * r.t));
+            hgt.push(r.t); phs.push(phase);
+        };
+
+        for (let sg = 0; sg < SEG - 1; sg++) {
+            const r0 = ring[sg], r1 = ring[sg + 1];
+            push(r0, -1); push(r0, 1); push(r1, 1);
+            push(r0, -1); push(r1, 1); push(r1, -1);
+        }
+        push(ring[SEG - 1], -1); push(ring[SEG - 1], 1); push(ring[SEG], 0);
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal',   new THREE.Float32BufferAttribute(nrm, 3));
+    geo.setAttribute('color',    new THREE.Float32BufferAttribute(col, 3));
+    geo.setAttribute('aHeight',  new THREE.Float32BufferAttribute(hgt, 1));
+    geo.setAttribute('aPhase',   new THREE.Float32BufferAttribute(phs, 1));
+    // Instances are placed by matrix, so a generous fixed bound beats recomputing.
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, GRASS_BLADE_HEIGHT * 0.5, 0), GRASS_BLADE_HEIGHT * 1.5);
+    return geo;
+}
+
+// Tints a ground plane the colour of shaded turf and thatch, with occasional
+// worn soil patches. This is what shows between the blades, so it carries a lot
+// of the lawn's read at a distance.
+function paintSoil(geo, lift = 0) {
+    const pos = geo.attributes.position;
+    const cols = new Float32Array(pos.count * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), z = pos.getZ(i);
+        // Two octaves of cheap trig noise: broad colour drift plus fine mottling.
+        const broad = Math.sin(x * 0.09 + 1.3) * Math.cos(z * 0.11 - 0.7);
+        const fine  = Math.sin(x * 0.63) * Math.cos(z * 0.57) + Math.sin(x * 1.31 + z * 0.9) * 0.5;
+        const wear  = Math.max(0, Math.sin(x * 0.17 + 2.1) * Math.cos(z * 0.13 + 0.4) - 0.7) * 1.6;
+        c.setHSL(
+            0.29 + broad * 0.012 - wear * 0.07,          // green, thinning toward earth where it's worn
+            0.45 + broad * 0.06  - wear * 0.10,
+            0.15 + fine * 0.018 + broad * 0.015 + wear * 0.05 + lift
+        );
+        cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+}
+
+function makeGrassMaterial() {
+    const mat = new THREE.MeshStandardMaterial({
+        color: 0x5FB33F, roughness: 0.95, metalness: 0,
+        vertexColors: true, side: THREE.DoubleSide,
+    });
+    mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime         = grassUniforms.uTime;
+        shader.uniforms.uWindDir      = grassUniforms.uWindDir;
+        shader.uniforms.uWindStrength = grassUniforms.uWindStrength;
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', `#include <common>
+                attribute float aHeight;
+                attribute float aPhase;
+                uniform float uTime;
+                uniform vec2  uWindDir;
+                uniform float uWindStrength;`)
+            .replace('#include <begin_vertex>', `#include <begin_vertex>
+                {
+                    // The wave is sampled at the tuft's world anchor, so gusts sweep
+                    // across the lawn as one coherent front rather than per-blade noise.
+                    vec3 anchor = modelMatrix[3].xyz;
+                    float cut = 1.0;
+                    #ifdef USE_INSTANCING
+                        anchor += instanceMatrix[3].xyz;
+                        cut = clamp(length(instanceMatrix[1].xyz), 0.0, 1.0);
+                    #endif
+                    float wave = sin(uTime * 1.9 + anchor.x * 0.45 + anchor.z * 0.35 + aPhase)
+                               + 0.5 * sin(uTime * 3.7 + anchor.x * 1.1 - anchor.z * 0.7);
+                    float gust = 0.55 + 0.45 * sin(uTime * 0.37 + anchor.x * 0.07 + anchor.z * 0.05);
+                    float sway = wave * gust * uWindStrength * 0.09 * aHeight * aHeight * cut;
+                    transformed.x += uWindDir.x * sway;
+                    transformed.z += uWindDir.y * sway;
+                    transformed.y -= abs(sway) * 0.3;   // a bent blade is a shorter blade
+                }`);
+        // Blades are double-sided cards; keep them lit from above on the back face too.
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+                normal.y = abs(normal.y);`);
+    };
+    return mat;
+}
+
+// =============================================================================
+// STATIC ENVIRONMENT
 // =============================================================================
 function buildStaticEnvironment() {
     yardEnvironmentGroup = new THREE.Group();
@@ -740,46 +1093,32 @@ function buildStaticEnvironment() {
     const infPos = infGroundGeo.attributes.position;
     for (let i = 0; i < infPos.count; i++) infPos.setY(i, getElevation(infPos.getX(i), infPos.getZ(i)) - 0.1);
     infGroundGeo.computeVertexNormals();
-    infGroundMesh = new THREE.Mesh(infGroundGeo, new THREE.MeshStandardMaterial({ color: 0x3f8a3a, roughness: 1 }));
+    paintSoil(infGroundGeo);
+    infGroundMesh = new THREE.Mesh(infGroundGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
     infGroundMesh.receiveShadow = true; infGroundMesh.visible = false; infGroundMesh.frustumCulled = false;
     scene.add(infGroundMesh);
 
-    const yardGroundGeo = new THREE.PlaneGeometry(YARD_SIZE + 10, YARD_SIZE + 10, 64, 64);
+    const yardGroundGeo = new THREE.PlaneGeometry(YARD_SIZE + 10, YARD_SIZE + 10, 96, 96);
     yardGroundGeo.rotateX(-Math.PI / 2);
     const yardPos = yardGroundGeo.attributes.position;
     for (let i = 0; i < yardPos.count; i++) yardPos.setY(i, getElevation(yardPos.getX(i), yardPos.getZ(i)) - 0.1);
     yardGroundGeo.computeVertexNormals();
-    yardGroundMesh = new THREE.Mesh(yardGroundGeo, new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 1 }));
+    paintSoil(yardGroundGeo);
+    yardGroundMesh = new THREE.Mesh(yardGroundGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
     yardGroundMesh.receiveShadow = true; yardGroundMesh.frustumCulled = false;
     yardEnvironmentGroup.add(yardGroundMesh);
 
-    const outerGeo = new THREE.PlaneGeometry(600, 600, 64, 64);
+    const outerGeo = new THREE.PlaneGeometry(600, 600, 96, 96);
     outerGeo.rotateX(-Math.PI / 2);
     const outerPos = outerGeo.attributes.position;
-    const outerColors = [];
-    for (let i = 0; i < outerPos.count; i++) {
-        const px = outerPos.getX(i), pz = outerPos.getZ(i);
-        outerPos.setY(i, getElevation(px, pz) - 0.5);
-        const sl = Math.sin(px * 0.1) * Math.cos(pz * 0.1) * 0.5 + 0.5;
-        const col = new THREE.Color().setHSL(0.33, 0.6, 0.25 + sl * 0.15);
-        outerColors.push(col.r, col.g, col.b);
-    }
-    outerGeo.setAttribute('color', new THREE.Float32BufferAttribute(outerColors, 3));
+    for (let i = 0; i < outerPos.count; i++) outerPos.setY(i, getElevation(outerPos.getX(i), outerPos.getZ(i)) - 0.16);
     outerGeo.computeVertexNormals();
+    paintSoil(outerGeo, 0.04);
     outerMesh = new THREE.Mesh(outerGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
     outerMesh.receiveShadow = true; outerMesh.frustumCulled = false;
     yardEnvironmentGroup.add(outerMesh);
 
-    const fenceMat = new THREE.MeshStandardMaterial({ color: 0xE8E4C9 });
-    const fenceGeo = new THREE.BoxGeometry(YARD_SIZE, 10, 0.5);
-    const addFence = (x, z, rotY) => {
-        const f = new THREE.Mesh(fenceGeo, fenceMat);
-        f.position.set(x, getElevation(x, z) - 3, z);
-        if (rotY) f.rotation.y = rotY;
-        f.castShadow = true; f.receiveShadow = true; yardEnvironmentGroup.add(f);
-    };
-    addFence(0, -YARD_SIZE/2 - 0.25, 0); addFence(0, YARD_SIZE/2 + 0.25, 0);
-    addFence(YARD_SIZE/2 + 0.25, 0, Math.PI/2); addFence(-YARD_SIZE/2 - 0.25, 0, Math.PI/2);
+    buildPicketFence();
 
     // ---- House (faces the yard on its +z side) ----
     const houseZ = -YARD_SIZE/2 - 6;
@@ -837,24 +1176,24 @@ function buildStaticEnvironment() {
     };
     addSconce(-2.2); addSconce(2.2);
 
+    buildTreeline();
     buildSummerDecor();
     buildCritters();
     buildWeather();
 
-    const bladeGeo = new THREE.BoxGeometry(GRASS_STEP * 0.9, 0.4, GRASS_STEP * 0.9);
-    bladeGeo.translate(0, 0.2, 0);
-    // ORIGINAL grass look: one shared green material, per-blade HSL tint on top.
-    const grassMat = new THREE.MeshStandardMaterial({ color: 0x4CAF50, roughness: 0.8 });
-    const seedGrassColor = new THREE.Color().setHSL(0.33, 0.5, 0.4);
+    // Real grass: each instance is a tuft of tapered blades that bend in the wind.
+    const grassMat = makeGrassMaterial();
+    const seedGrassColor = grassTint(new THREE.Color(), 0.5, 0.5);
 
-    yardGrassMesh = new THREE.InstancedMesh(bladeGeo, grassMat, YARD_GRASS_COUNT);
-    yardGrassMesh.castShadow = true; yardGrassMesh.receiveShadow = true; yardGrassMesh.frustumCulled = false;
+    yardGrassMesh = new THREE.InstancedMesh(makeGrassTuftGeometry(7), grassMat, YARD_GRASS_COUNT);
+    yardGrassMesh.receiveShadow = true; yardGrassMesh.frustumCulled = false;
     for (let i = 0; i < YARD_GRASS_COUNT; i++) yardGrassMesh.setColorAt(i, seedGrassColor);
     yardGrassMesh.instanceColor.needsUpdate = true;
     scene.add(yardGrassMesh);
 
-    infGrassMesh = new THREE.InstancedMesh(bladeGeo, grassMat, INF_GRASS_COUNT);
-    infGrassMesh.castShadow = true; infGrassMesh.receiveShadow = true; infGrassMesh.frustumCulled = false; infGrassMesh.visible = false;
+    // The endless lawn draws 2x the tufts, so it uses a lighter-weight blade count.
+    infGrassMesh = new THREE.InstancedMesh(makeGrassTuftGeometry(5), grassMat, INF_GRASS_COUNT);
+    infGrassMesh.receiveShadow = true; infGrassMesh.frustumCulled = false; infGrassMesh.visible = false;
     for (let i = 0; i < INF_GRASS_COUNT; i++) infGrassMesh.setColorAt(i, seedGrassColor);
     infGrassMesh.instanceColor.needsUpdate = true;
     scene.add(infGrassMesh);
@@ -869,16 +1208,18 @@ function buildStaticEnvironment() {
     for (let i = 0; i < MAX_INF_STUMPS; i++) infStumpMesh.setColorAt(i, new THREE.Color(0x5C4033));
     infStumpMesh.instanceColor.needsUpdate = true; infStumpMesh.material.needsUpdate = true; scene.add(infStumpMesh);
 
-    particleMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_PARTICLES);
+    // A clipping is a scrap of blade, not a cube: a thin quad that tumbles as it flies.
+    particleMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.07, 0.2), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), MAX_PARTICLES);
     particleMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); particleMesh.frustumCulled = false;
     for (let p = 0; p < MAX_PARTICLES; p++) {
-        particlesData.push({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, maxLife: 1 });
+        particlesData.push({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, maxLife: 1,
+                            spinAxis: new THREE.Vector3(0, 1, 0), spin: 0, angle: 0 });
         particleMesh.setMatrixAt(p, new THREE.Matrix4().makeScale(0, 0, 0));
         particleMesh.setColorAt(p, new THREE.Color(0xffffff));
     }
     scene.add(particleMesh);
 
-    weedMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.2, 0), new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.4 }), TOTAL_WEEDS);
+    weedMesh = new THREE.InstancedMesh(makeDandelionGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, side: THREE.DoubleSide }), TOTAL_WEEDS);
     weedMesh.castShadow = true; weedMesh.frustumCulled = false; scene.add(weedMesh);
 
     const bugGeo = new THREE.ConeGeometry(0.04, 0.12, 4); bugGeo.rotateX(Math.PI / 2);
@@ -891,9 +1232,22 @@ function buildStaticEnvironment() {
     }
     scene.add(bugMesh);
 
+    // Each bug carries a soft additive halo. It's invisible by day and turns the
+    // yard into a field of fireflies after dusk.
+    fireflyGlowMesh = new THREE.InstancedMesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+            map: makeGlowTexture(), color: 0xBBFF66, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+        }),
+        NUM_BUGS);
+    fireflyGlowMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    fireflyGlowMesh.frustumCulled = false; fireflyGlowMesh.visible = false;
+    scene.add(fireflyGlowMesh);
+
     cloudGroup = new THREE.Group();
     const cloudGeo = new THREE.SphereGeometry(1, 16, 16);
-    cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, fog: false });
+    cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x000000, flatShading: true, fog: false, roughness: 1 });
     for (let i = 0; i < 12; i++) {
         const cloud = new THREE.Group();
         const blobs = 5 + Math.floor(Math.random() * 6);
@@ -942,6 +1296,106 @@ function buildStaticEnvironment() {
     }
 }
 
+// A hedgerow of neighbourhood trees in the middle distance. Without it the world
+// beyond the fence is a flat green plate running to the fog, which kills any
+// sense that the yard sits somewhere.
+function buildTreeline() {
+    const COUNT = 150;
+    const geo = makeDistantTreeGeometry();
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+    const trees = new THREE.InstancedMesh(geo, mat, COUNT);
+    trees.castShadow = false; trees.receiveShadow = true; trees.frustumCulled = false;
+
+    const d = new THREE.Object3D(), tint = new THREE.Color();
+    for (let i = 0; i < COUNT; i++) {
+        const h1 = deterministicHash(i * 1.7 + 0.3, i * 0.9 - 2.1);
+        const h2 = deterministicHash(i * 2.3 - 1.1, i * 3.1 + 0.7);
+        const h3 = deterministicHash(i * 0.5 + 5.5, i * 1.3 + 9.9);
+        const ang = (i / COUNT) * Math.PI * 2 + (h1 - 0.5) * 0.09;
+        const rad = 46 + h2 * 44;
+        const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
+        // Leave the house's plot clear.
+        if (z < -YARD_SIZE / 2 && Math.abs(x) < 14 && rad < 56) { d.scale.set(0, 0, 0); d.updateMatrix(); trees.setMatrixAt(i, d.matrix); continue; }
+        const sc = 0.8 + h3 * 1.0;
+        d.position.set(x, getElevation(x, z) - 0.4, z);
+        d.rotation.set(0, h1 * Math.PI * 2, 0);
+        d.scale.set(sc * (0.85 + h2 * 0.3), sc, sc * (0.85 + h1 * 0.3));
+        d.updateMatrix();
+        trees.setMatrixAt(i, d.matrix);
+        // Vary the canopy so the line doesn't read as one repeated stamp.
+        tint.setHSL(0.27 + h2 * 0.05, 0.55 + h1 * 0.25, 0.72 + h3 * 0.4);
+        trees.setColorAt(i, tint);
+    }
+    trees.instanceMatrix.needsUpdate = true;
+    if (trees.instanceColor) trees.instanceColor.needsUpdate = true;
+    yardEnvironmentGroup.add(trees);
+}
+
+// A real picket fence instead of a blank slab wall: low enough to see the
+// neighbourhood over, and the repeated verticals give the yard a sense of scale.
+function buildPicketFence() {
+    const FENCE_H = 1.34, PICKET_W = 0.07, SPACING = 0.34;
+    const half = YARD_SIZE / 2 + 0.4;
+
+    // Picket profile: a plank with a pointed cap.
+    const sh = new THREE.Shape();
+    sh.moveTo(-PICKET_W, 0); sh.lineTo(PICKET_W, 0); sh.lineTo(PICKET_W, FENCE_H - 0.17);
+    sh.lineTo(0, FENCE_H); sh.lineTo(-PICKET_W, FENCE_H - 0.17); sh.closePath();
+    const picketGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: false });
+    picketGeo.translate(0, 0, -0.025);
+
+    const paintMat = new THREE.MeshStandardMaterial({ color: 0xF2EEDF, roughness: 0.85 });
+    const railMat  = new THREE.MeshStandardMaterial({ color: 0xE4DFCB, roughness: 0.9 });
+
+    const perSide = Math.floor(YARD_SIZE / SPACING);
+    const picketMesh = new THREE.InstancedMesh(picketGeo, paintMat, perSide * 4);
+    picketMesh.castShadow = true; picketMesh.receiveShadow = true; picketMesh.frustumCulled = false;
+
+    const d = new THREE.Object3D();
+    const tint = new THREE.Color();
+    let n = 0;
+    // sides: [fixed axis value, rotation, whether the run is along x]
+    const sides = [[-half, 0, true], [half, Math.PI, true], [-half, Math.PI / 2, false], [half, -Math.PI / 2, false]];
+    for (const [fixed, rot, alongX] of sides) {
+        for (let i = 0; i < perSide; i++) {
+            const t = -YARD_SIZE / 2 + (i + 0.5) * SPACING;
+            const x = alongX ? t : fixed, z = alongX ? fixed : t;
+            d.position.set(x, getElevation(x, z) - 0.12, z);
+            d.rotation.set(0, rot + (deterministicHash(i, fixed) - 0.5) * 0.05, 0);
+            d.scale.set(1, 0.94 + deterministicHash(i + 31, fixed) * 0.12, 1);
+            d.updateMatrix();
+            picketMesh.setMatrixAt(n, d.matrix);
+            // Weathered paint: a little per-picket variation stops it reading as plastic.
+            const w = deterministicHash(i + 7, fixed + 3);
+            picketMesh.setColorAt(n, tint.setHSL(0.13, 0.10 + w * 0.08, 0.80 + w * 0.14));
+            n++;
+        }
+    }
+    picketMesh.instanceMatrix.needsUpdate = true;
+    if (picketMesh.instanceColor) picketMesh.instanceColor.needsUpdate = true;
+    yardEnvironmentGroup.add(picketMesh);
+
+    // Horizontal rails behind the pickets, plus a post at each corner.
+    const railGeo = new THREE.BoxGeometry(YARD_SIZE + 0.9, 0.11, 0.07);
+    for (const [fixed, , alongX] of sides) {
+        for (const ry of [0.34, 0.92]) {
+            const rail = new THREE.Mesh(railGeo, railMat);
+            const x = alongX ? 0 : fixed, z = alongX ? fixed : 0;
+            rail.position.set(x, getElevation(x, z) + ry, z);
+            rail.rotation.y = alongX ? 0 : Math.PI / 2;
+            rail.castShadow = true; rail.receiveShadow = true;
+            yardEnvironmentGroup.add(rail);
+        }
+    }
+    const postGeo = new THREE.BoxGeometry(0.17, FENCE_H + 0.3, 0.17);
+    for (const px of [-half, half]) for (const pz of [-half, half]) {
+        const post = new THREE.Mesh(postGeo, paintMat);
+        post.position.set(px, getElevation(px, pz) + (FENCE_H + 0.3) / 2 - 0.15, pz);
+        post.castShadow = true; post.receiveShadow = true;
+        yardEnvironmentGroup.add(post);
+    }
+}
+
 function buildSummerDecor() {
     const barkMat = new THREE.MeshStandardMaterial({ color: 0x6B4226, roughness: 1 });
     const leafMat = new THREE.MeshStandardMaterial({ color: 0x2E7D32, roughness: 0.9, flatShading: true });
@@ -965,6 +1419,7 @@ function buildSummerDecor() {
     tree.position.set(TREE_X, getElevation(TREE_X, TREE_Z), TREE_Z);
     yardEnvironmentGroup.add(tree);
     decorItems.push({ group: tree, x: TREE_X, z: TREE_Z, yOff: 0 });
+    bigTree = tree; tireSwing = { rope, tire };
 
     const table = new THREE.Group();
     const top = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.1, 1.1), woodMat);
@@ -1352,13 +1807,41 @@ function buildDetector() {
 
 function buildMower() {
     mowerGroup = new THREE.Group();
-    mowerBodyMesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 1.6), new THREE.MeshStandardMaterial({ color: 0xCC0000 }));
+    mowerBodyMesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 1.6), new THREE.MeshStandardMaterial({ color: 0xCC1111, roughness: 0.45, metalness: 0.15 }));
     mowerBodyMesh.position.y = 0.4; mowerBodyMesh.castShadow = true; mowerGroup.add(mowerBodyMesh);
+
+    // Deck skirt: the dark shroud the blade spins inside, a touch wider than the body.
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x2A2A2E, roughness: 0.6, metalness: 0.3 });
+    mowerDeck = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.2, 1.7), deckMat);
+    mowerDeck.position.y = 0.2; mowerDeck.castShadow = true; mowerGroup.add(mowerDeck);
+
+    // Spinning blade, visible under the deck and when the hover thrusters lift it.
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0xC8CCD4, metalness: 0.85, roughness: 0.28, side: THREE.DoubleSide });
+    mowerBlade = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.03, 0.14), bladeMat);
+    mowerBlade.position.y = 0.11; mowerGroup.add(mowerBlade);
+
+    // Grass catcher slung off the back.
+    const bag = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.5, 0.45), new THREE.MeshStandardMaterial({ color: 0x3E6B2C, roughness: 0.95 }));
+    bag.position.set(0, 0.52, -0.95); bag.rotation.x = -0.2; bag.castShadow = true; mowerGroup.add(bag);
+
     const engine = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.8), new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.3 }));
     engine.position.set(0, 0.75, 0); engine.castShadow = true; mowerGroup.add(engine);
-    const wheelGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.15, 16); wheelGeo.rotateZ(Math.PI/2);
-    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
-    [[-0.65,0.25,0.6],[0.65,0.25,0.6],[-0.65,0.25,-0.6],[0.65,0.25,-0.6]].forEach(p => { const w = new THREE.Mesh(wheelGeo, wheelMat); w.position.set(...p); w.castShadow = true; mowerGroup.add(w); });
+    const fuelCap = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.07, 10), new THREE.MeshStandardMaterial({ color: 0x1A1A1A, roughness: 0.5 }));
+    fuelCap.position.set(-0.22, 0.93, 0.2); mowerGroup.add(fuelCap);
+    const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.26, 8), new THREE.MeshStandardMaterial({ color: 0x55585E, metalness: 0.8, roughness: 0.4 }));
+    exhaust.position.set(0.36, 0.72, -0.34); exhaust.rotation.x = 0.5; mowerGroup.add(exhaust);
+
+    // Chunky treaded wheels: a rim plus a tyre, with a hub cap to catch the light.
+    const wheelGeo = new THREE.CylinderGeometry(0.26, 0.26, 0.17, 18); wheelGeo.rotateZ(Math.PI/2);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1C1C1E, roughness: 0.95 });
+    const hubGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.19, 10); hubGeo.rotateZ(Math.PI/2);
+    const hubMat = new THREE.MeshStandardMaterial({ color: 0xD8D8DC, metalness: 0.6, roughness: 0.35 });
+    mowerWheels = [];
+    [[-0.68,0.26,0.6],[0.68,0.26,0.6],[-0.68,0.26,-0.6],[0.68,0.26,-0.6]].forEach(p => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat); w.position.set(...p); w.castShadow = true; mowerGroup.add(w);
+        const hub = new THREE.Mesh(hubGeo, hubMat); hub.position.set(p[0] + (p[0] > 0 ? 0.02 : -0.02), p[1], p[2]); mowerGroup.add(hub);
+        mowerWheels.push(w, hub);
+    });
     const handleMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
     [[-0.45],[0.45]].forEach(([xOff]) => {
         const mount = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2), handleMat); mount.position.set(xOff, 0.6, -0.6); mowerGroup.add(mount);
@@ -1421,14 +1904,15 @@ function updateInfinityGrid(force = false) {
                 stumpIdx++;
             }
 
-            if (hObs >= 0.015 && hObs < 0.025 && !worldWeedMap.get(k) && weedIdx < TOTAL_WEEDS) {
-                dp.set(x, y + 0.5, z); eu.set(hObs*100, hObs*100, hObs*100); dq.setFromEuler(eu); ds.set(1,1,1);
+            if (isInfinityWeed(wx, wz) && !worldWeedMap.get(k) && weedIdx < TOTAL_WEEDS) {
+                dp.set(x, y, z); eu.set(0, hObs * 700, 0); dq.setFromEuler(eu); ds.set(1, 0.9 + hGrass * 0.4, 1);
                 dm.compose(dp, dq, ds); weedMesh.setMatrixAt(weedIdx++, dm);
             }
 
-            dp.set(x, y, z); dq.identity();
-            if (worldMowedMap.get(k)) { ds.set(1, 0.1, 1); grassMesh.setColorAt(idx, _tempColor.set(mowedTint(x, z))); }
-            else { const wb = worldWateredMap.get(k) || 0; ds.set(1, 1 + wb + (hGrass * 0.3), 1); grassMesh.setColorAt(idx, _tempColor.setHSL(0.33, 0.5, 0.4 + (hGrass - 0.5) * 0.1)); }
+            const spread = 0.9 + hGrass * 0.35;
+            dp.set(x, y, z); eu.set(0, deterministicHash(wx * 3 + 1, wz * 5 + 2) * Math.PI * 2, 0); dq.setFromEuler(eu);
+            if (worldMowedMap.get(k)) { ds.set(spread, MOWED_SCALE_Y, spread); grassMesh.setColorAt(idx, _tempColor.set(mowedTint(x, z))); }
+            else { const wb = worldWateredMap.get(k) || 0; ds.set(spread, 0.82 + wb + (hGrass * 0.36), spread); grassMesh.setColorAt(idx, grassTint(_tempColor, hGrass, deterministicHash(wx + 5, wz - 5))); }
             dm.compose(dp, dq, ds); grassMesh.setMatrixAt(idx++, dm);
         }
     }
@@ -1487,16 +1971,13 @@ function populateYard(reseed) {
             geo.computeVertexNormals(); p.needsUpdate = true;
         };
         regenGeo(yardGroundMesh.geometry, 0.1);
+        paintSoil(yardGroundMesh.geometry);
+        yardGroundMesh.geometry.attributes.color.needsUpdate = true;
         const outerP = outerMesh.geometry.attributes.position;
-        const outerC = outerMesh.geometry.attributes.color;
-        for (let i = 0; i < outerP.count; i++) {
-            const px = outerP.getX(i), pz = outerP.getZ(i);
-            outerP.setY(i, getElevation(px, pz) - 0.5);
-            const sl = Math.sin(px * 0.1) * Math.cos(pz * 0.1) * 0.5 + 0.5;
-            const col = _tempColor.setHSL(0.33, 0.6, 0.25 + sl * 0.15);
-            outerC.setXYZ(i, col.r, col.g, col.b);
-        }
-        outerMesh.geometry.computeVertexNormals(); outerP.needsUpdate = true; outerC.needsUpdate = true;
+        for (let i = 0; i < outerP.count; i++) outerP.setY(i, getElevation(outerP.getX(i), outerP.getZ(i)) - 0.16);
+        outerMesh.geometry.computeVertexNormals(); outerP.needsUpdate = true;
+        paintSoil(outerMesh.geometry, 0.04);
+        outerMesh.geometry.attributes.color.needsUpdate = true;
     }
 
     obstacles.forEach(obs => { if (obs.mesh) { yardEnvironmentGroup.remove(obs.mesh); obs.mesh.geometry.dispose(); obs.mesh.material.dispose(); } });
@@ -1572,11 +2053,18 @@ function populateYard(reseed) {
             const y = getElevation(x, z);
             let underObstacle = false;
             for (const obs of obstacles) { if (Math.sqrt((x-obs.x)**2 + (z-obs.z)**2) < obs.radius + 0.3) { underObstacle = true; break; } }
+            // Spin and scale each tuft a little: the blade mesh is shared, so this
+            // rotation is the only thing stopping the lawn from looking tiled.
+            dummy.rotation.set(0, deterministicHash(col * 3 + 1, row * 5 + 2) * Math.PI * 2, 0);
             if (underObstacle) { yardGrassStates[idx] = 1; yardBlocked[idx] = 1; mowedCount++; dummy.position.set(x, y - 10, z); dummy.scale.set(0, 0, 0); }
-            else { dummy.position.set(x, y, z); dummy.scale.set(1, 1 + Math.random()*0.3, 1); }
+            else {
+                const spread = 0.9 + Math.random() * 0.35;
+                dummy.position.set(x, y, z); dummy.scale.set(spread, 0.82 + Math.random() * 0.36, spread);
+            }
             dummy.updateMatrix();
             yardGrassMesh.setMatrixAt(idx, dummy.matrix);
-            yardGrassMesh.setColorAt(idx, _tempColor.setHSL(0.33, 0.5, 0.4 + (Math.random()-0.5)*0.1));
+            grassTint(_tempColor, deterministicHash(col + 13, row + 29), deterministicHash(col - 7, row + 91));
+            yardGrassMesh.setColorAt(idx, _tempColor);
             idx++;
         }
     }
@@ -1593,9 +2081,9 @@ function populateYard(reseed) {
             const row = Math.floor(ri / GRASS_GRID_SIZE), col = ri % GRASS_GRID_SIZE;
             const x = (col * GRASS_STEP) - halfYard + (GRASS_STEP/2) + (Math.random()-0.5)*0.3;
             const z = (row * GRASS_STEP) - halfYard + (GRASS_STEP/2) + (Math.random()-0.5)*0.3;
-            td.position.set(x, getElevation(x, z) + 0.5, z);
-            td.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
-            const s = 0.8 + Math.random()*0.5; td.scale.set(s, s, s);
+            td.position.set(x, getElevation(x, z), z);
+            td.rotation.set((Math.random()-0.5)*0.22, Math.random()*Math.PI*2, (Math.random()-0.5)*0.22);
+            const s = 0.9 + Math.random()*0.5; td.scale.set(s, s * (0.9 + Math.random()*0.35), s);
             td.updateMatrix(); weedMesh.setMatrixAt(weedsPlaced, td.matrix);
             yardWeedStates[ri] = weedsPlaced + 1; weedsPlaced++;
         }
@@ -1648,7 +2136,7 @@ function setupInput() {
             case 'KeyO': if (isGameRunning && hasOrb) toggleDayNight(); break;
             case 'KeyL': if (isGameRunning && !isInfinityMode) toggleDartsMode(); break;
             case 'KeyM': if (isGameRunning && !isInfinityMode) toggleDetectorMode(); break;
-            case 'KeyR': // TEMP debug: trigger a rain shower on demand
+            case 'KeyR': // Call in a shower on demand (rain regrows grass and paints puddles)
                 if (isGameRunning && !isInfinityMode && weatherState === 'clear') {
                     weatherState = 'incoming'; weatherPhase = 7; weatherTimer = 0;
                     showNotification('RAIN INCOMING', 'A shower is rolling in...', 2000);
@@ -2184,21 +2672,58 @@ function addCoins(amount) {
     playCoinBlip();
 }
 
-function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+// ---------------------------------------------------------------------------
+// ADAPTIVE RESOLUTION
+// ---------------------------------------------------------------------------
+// The lawn is a lot of geometry. Rather than ship a quality menu nobody opens,
+// watch the frame rate and scale the render resolution to fit the device. Only
+// the backbuffer changes — the yard itself is never thinned out.
+const PIXEL_RATIO_STEPS = [1, 0.8, 0.65, 0.5];
+let maxPixelRatio = 1, pixelRatioScale = 1, perfAccum = 0, perfFrames = 0, perfCooldown = 3;
+
+function updateAdaptiveQuality(deltaTime) {
+    if (perfCooldown > 0) { perfCooldown -= deltaTime; return; }
+    perfAccum += deltaTime; perfFrames++;
+    if (perfAccum < 1.5) return;
+
+    const fps = perfFrames / perfAccum;
+    perfAccum = 0; perfFrames = 0;
+    const i = PIXEL_RATIO_STEPS.indexOf(pixelRatioScale);
+    let next = i;
+    if (fps < 45 && i < PIXEL_RATIO_STEPS.length - 1) next = i + 1;
+    else if (fps > 58 && i > 0) next = i - 1;          // headroom to spare — give it back
+    if (next === i) return;
+
+    pixelRatioScale = PIXEL_RATIO_STEPS[next];
+    renderer.setPixelRatio(maxPixelRatio * pixelRatioScale);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    perfCooldown = 3;                                  // let it settle before judging again
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(maxPixelRatio * pixelRatioScale);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
 
 // =============================================================================
 // PHYSICS / SYSTEMS
 // =============================================================================
 let particleIndex = 0;
-function spawnParticles(x, z, colorHex, count, velocityScale = 1) {
+// biasX/biasZ push the whole burst one way — used for the mower's side
+// discharge. Leave them at zero for an even puff.
+function spawnParticles(x, z, colorHex, count, velocityScale = 1, biasX = 0, biasZ = 0) {
     const groundY = getElevation(x, z);
     _tempColor.set(colorHex);
     for (let i = 0; i < count; i++) {
         const p = particlesData[particleIndex];
         const wasActive = p.active; p.active = true;
         p.pos.set(x + (Math.random()-0.5)*0.5, groundY + 0.4, z + (Math.random()-0.5)*0.5);
-        p.vel.set((Math.random()-0.5)*4*velocityScale, (2+Math.random()*3)*velocityScale, (Math.random()-0.5)*4*velocityScale);
+        p.vel.set((Math.random()-0.5)*4*velocityScale + biasX, (2+Math.random()*3)*velocityScale, (Math.random()-0.5)*4*velocityScale + biasZ);
         p.life = p.maxLife = 0.4 + Math.random()*0.4;
+        p.spinAxis.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize();
+        p.spin = (Math.random() - 0.5) * 26; p.angle = Math.random() * Math.PI * 2;
         particleMesh.setColorAt(particleIndex, _tempColor);
         if (!wasActive) activeParticleCount++;
         particleIndex = (particleIndex + 1) % MAX_PARTICLES;
@@ -2220,7 +2745,8 @@ function updateParticles(deltaTime) {
             const gY = getElevation(p.pos.x, p.pos.z);
             if (p.pos.y < gY + 0.05) { p.pos.y = gY + 0.05; p.vel.y *= -0.3; p.vel.x *= 0.6; p.vel.z *= 0.6; }
             const s = p.life / p.maxLife;
-            tempPosition.copy(p.pos); tempQuaternion.identity(); tempScale.set(s, s, s);
+            p.angle += p.spin * deltaTime;
+            tempPosition.copy(p.pos); tempQuaternion.setFromAxisAngle(p.spinAxis, p.angle); tempScale.set(s, s, s);
             tempMatrix.compose(tempPosition, tempQuaternion, tempScale); particleMesh.setMatrixAt(i, tempMatrix);
         }
         updated = true;
@@ -2228,10 +2754,15 @@ function updateParticles(deltaTime) {
     if (updated) particleMesh.instanceMatrix.needsUpdate = true;
 }
 
+let fireflyGlow = 0;
 function updateBugs(deltaTime, time) {
     const mx = mowerGroup.position.x, mz = mowerGroup.position.z;
     const bugSpeed = isNightTime ? 0.3 : 1.0;
     let colorDirty = false;
+    // Halos fade in with the headlights rather than snapping on at the night boundary.
+    fireflyGlow += ((isNightTime ? 0.85 : 0) - fireflyGlow) * Math.min(1, deltaTime * 1.5);
+    const glowTarget = fireflyGlow;
+    const glowing = glowTarget > 0.01;
     for (let i = 0; i < NUM_BUGS; i++) {
         const b = bugsData[i];
         if (isInfinityMode && Math.hypot(b.home.x - mowerGroup.position.x, b.home.z - mowerGroup.position.z) > 60) {
@@ -2255,9 +2786,43 @@ function updateBugs(deltaTime, time) {
         if (isNightTime) { const pulse = 0.5 + 0.5 * Math.sin(time/200 + b.seed*3); _tempColor.setRGB(0.6 + 0.4*pulse, 1.0, 0.3 * pulse); }
         else _tempColor.setHSL(b.hue, 0.6, 0.75);
         bugMesh.setColorAt(i, _tempColor); colorDirty = true;
+
+        if (glowing) {
+            // Billboard the halo and pulse it out of phase with its bug.
+            const pulse = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(time / 190 + b.seed * 3), 2);
+            const gs = (0.5 + pulse * 0.55);
+            tempQuaternion.copy(camera.quaternion);
+            tempScale.set(gs, gs, gs);
+            tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+            fireflyGlowMesh.setMatrixAt(i, tempMatrix);
+            _tempColor.setRGB(0.45 + 0.4 * pulse, 0.85 + 0.15 * pulse, 0.18 * pulse);
+            fireflyGlowMesh.setColorAt(i, _tempColor);
+        }
     }
     bugMesh.instanceMatrix.needsUpdate = true;
     if (colorDirty && bugMesh.instanceColor) bugMesh.instanceColor.needsUpdate = true;
+    if (glowing) {
+        fireflyGlowMesh.instanceMatrix.needsUpdate = true;
+        if (fireflyGlowMesh.instanceColor) fireflyGlowMesh.instanceColor.needsUpdate = true;
+    }
+    fireflyGlowMesh.visible = glowTarget > 0.01;
+    fireflyGlowMesh.material.opacity = glowTarget;
+}
+
+// Advances the shared wind field. The grass shader samples uTime directly; the
+// CPU-side sway helpers read windSway, so everything moves together.
+let windSway = 0;
+function updateWind(deltaTime, time) {
+    const t = time * 0.001;
+    grassUniforms.uTime.value = t;
+    // Rain brings a real blow; a clear afternoon is just a breeze.
+    const target = 1 + rainIntensity * 1.8;
+    grassUniforms.uWindStrength.value += (target - grassUniforms.uWindStrength.value) * Math.min(1, deltaTime * 0.8);
+    const windGust = 0.55 + 0.45 * Math.sin(t * 0.37);
+    windSway = Math.sin(t * 1.9) * windGust * grassUniforms.uWindStrength.value;
+    // The prevailing direction drifts slowly so the lawn never looks looped.
+    const ang = 0.6 + Math.sin(t * 0.045) * 0.5;
+    grassUniforms.uWindDir.value.set(Math.cos(ang), Math.sin(ang));
 }
 
 function updateAtmosphere(deltaTime, time) {
@@ -2286,6 +2851,27 @@ function updateAtmosphere(deltaTime, time) {
         let targetOpacity = (hour >= 19 || hour < 5) ? 0.9 : ((hour >= 18 && hour < 19) ? (hour - 18) * 0.9 : ((hour >= 5 && hour < 6) ? (6 - hour) * 0.9 : 0));
         starField.material.opacity += (targetOpacity - starField.material.opacity) * Math.min(1, deltaTime * 2);
     }
+    // The tree leans on the same wind field as the grass, and the tire swing
+    // trails it slightly so the yard moves as one thing.
+    if (bigTree) {
+        const lean = windSway * 0.016;
+        bigTree.rotation.z = -lean * grassUniforms.uWindDir.value.x;
+        bigTree.rotation.x = lean * grassUniforms.uWindDir.value.y;
+    }
+    if (tireSwing) {
+        // Both parts hang off the same branch point, so swing them as a pendulum
+        // about that pivot rather than spinning each about its own centre.
+        const swing = Math.sin(time / 1450) * 0.10 + windSway * 0.04;
+        const px = 2.5, py = 4.3;                       // where the rope meets the branch
+        const place = (obj, drop) => {
+            obj.rotation.z = -swing;
+            obj.position.x = px + Math.sin(swing) * drop;
+            obj.position.y = py - Math.cos(swing) * drop;
+        };
+        place(tireSwing.rope, 1.1);                     // rope centre, half its length down
+        place(tireSwing.tire, 2.4);
+    }
+
     // Pool ball bob/spin + BBQ smoke wisp (classic yard only)
     if (!isInfinityMode && yardEnvironmentGroup.visible) {
         if (poolBall) {
@@ -2351,34 +2937,69 @@ function updateDayNight(deltaTime) {
     moonMesh.visible = sunHeight < 0.3;
     if (camera) moonMesh.lookAt(camera.position);
 
-    let lightIntensity, ambientIntensity;
+    // Blend the three sky palettes across the arc. _dnSky ends up holding the
+    // horizon colour, which is also what the fog matches so distant geometry
+    // dissolves into the skyline instead of into a flat blue wall.
+    let lightIntensity, ambientIntensity, sunGlow;
+    const lerpSky = (a, b, f) => {
+        _dnSky.copy(a.horizon).lerp(b.horizon, f);
+        _dnZenith.copy(a.zenith).lerp(b.zenith, f);
+        _dnGround.copy(a.ground).lerp(b.ground, f);
+        _dnHemi.copy(a.hemi).lerp(b.hemi, f);
+        _dnCloud.copy(a.cloud).lerp(b.cloud, f);
+    };
     if (sunHeight > 0.15) {
-        _dnSky.copy(colorDaySky); _dnLight.copy(colorSunLight); lightIntensity = 1.0; ambientIntensity = 0.6;
+        lerpSky(SKY.day, SKY.day, 0);
+        _dnLight.copy(colorSunLight); lightIntensity = 1.15; ambientIntensity = 0.5; sunGlow = 1.0;
     } else if (sunHeight > -0.05) {
-        const f = (sunHeight + 0.05) / 0.2;
-        _dnSky.copy(colorSunsetSky).lerp(colorDaySky, f);
+        const f = (sunHeight + 0.05) / 0.2;                 // 0 at dusk → 1 at full day
+        lerpSky(SKY.sunset, SKY.day, f);
         _dnLight.copy(colorSunsetLight).lerp(colorSunLight, f);
-        lightIntensity = 0.5 + f * 0.5; ambientIntensity = 0.35 + f * 0.25;
+        lightIntensity = 0.55 + f * 0.6; ambientIntensity = 0.4 + f * 0.1; sunGlow = 1.6 - f * 0.6;
     } else if (sunHeight > -0.25) {
-        const f = (sunHeight + 0.25) / 0.2;
-        _dnSky.copy(colorNightSky).lerp(colorSunsetSky, f);
+        const f = (sunHeight + 0.25) / 0.2;                 // 0 at night → 1 at dusk
+        lerpSky(SKY.night, SKY.sunset, f);
         _dnLight.copy(colorMoonLight).lerp(colorSunsetLight, f);
-        lightIntensity = 0.15 + f * 0.35; ambientIntensity = 0.2 + f * 0.15;
+        lightIntensity = 0.38 + f * 0.17; ambientIntensity = 0.5 - f * 0.1; sunGlow = f * 1.6;
     } else {
-        _dnSky.copy(colorNightSky); _dnLight.copy(colorMoonLight); lightIntensity = 0.15; ambientIntensity = 0.2;
+        lerpSky(SKY.night, SKY.night, 0);
+        _dnLight.copy(colorMoonLight); lightIntensity = 0.38; ambientIntensity = 0.5; sunGlow = 0;
     }
 
     if (rainIntensity > 0) {
-        _dnSky.lerp(colorOvercast, rainIntensity * 0.8);
-        lightIntensity *= (1 - rainIntensity * 0.6);
-        ambientIntensity *= (1 - rainIntensity * 0.4);
+        const r = rainIntensity;
+        _dnSky.lerp(colorOvercast, r * 0.85);
+        _dnZenith.lerp(colorOvercast, r * 0.7);
+        _dnHemi.lerp(colorOvercast, r * 0.6);
+        _dnCloud.lerp(colorOvercast, r * 0.85);
+        lightIntensity *= (1 - r * 0.6);
+        ambientIntensity *= (1 - r * 0.3);
+        sunGlow *= (1 - r);
     }
 
     scene.background.copy(_dnSky);
     if (scene.fog) scene.fog.color.copy(_dnSky);
+    if (skyDome) {
+        skyUniforms.uHorizon.value.copy(_dnSky);
+        skyUniforms.uZenith.value.copy(_dnZenith);
+        skyUniforms.uGround.value.copy(_dnGround);
+        skyUniforms.uSunColor.value.copy(_dnLight);
+        skyUniforms.uSunIntensity.value = sunGlow;
+        skyUniforms.uSunDir.value.set(Math.cos(sunAngle), sunHeight, 0).normalize();
+        if (camera) skyDome.position.copy(camera.position);
+    }
+    // Clouds take the light's colour, so they burn orange at sunset and go slate
+    // in a shower instead of staying flat white all day.
+    if (cloudMat) {
+        cloudMat.color.copy(_dnCloud);
+        cloudMat.emissive.copy(_dnCloud).multiplyScalar(sunGlow * 0.10);
+    }
     dirLight.color.copy(_dnLight);
     dirLight.intensity = lightIntensity;
     ambientLight.intensity = ambientIntensity;
+    ambientLight.color.copy(_dnHemi);
+    // The upward bounce stays green by day and goes cold and dim at night.
+    ambientLight.groundColor.copy(_dnGround).lerp(_dnHemi, 0.25);
 
     // Headlights ramp up at dusk/night
     const targetHl = isNightTime ? 2.0 : (sunHeight < 0.15 ? (0.15 - sunHeight) * 4 : 0);
@@ -2474,6 +3095,10 @@ function updateMower(deltaTime) {
     mowerBodyMesh.parent.rotation.x += (targetPitch - mowerBodyMesh.parent.rotation.x) * 0.1;
     mowerBodyMesh.parent.rotation.z += (targetRoll - mowerBodyMesh.parent.rotation.z) * 0.1;
 
+    // Blade spins whenever the engine is running; wheels roll at true ground speed.
+    if (mowerBlade) mowerBlade.rotation.y += deltaTime * (26 + Math.abs(mowerState.speed) * 3);
+    for (const w of mowerWheels) w.rotation.x += (mowerState.speed / 0.26) * deltaTime;
+
     if (keys.water && hasWaterGun) sprayWater(deltaTime);
 
     // Trail Smoke (cosmetic exhaust puffs)
@@ -2490,7 +3115,7 @@ function updateMower(deltaTime) {
         document.getElementById('icon-laser').classList.remove('opacity-40'); document.getElementById('laser-ui').style.display = 'flex';
         showNotification('LASER MOWER!', 'Press G to fire', 2000);
     }
-    if (checkPickup(waterGunPowerupGroup, hasWaterGun === false && waterGunPowerupGroup.visible, 1.5)) {
+    if (checkPickup(waterGunPowerupGroup, !hasWaterGun, 1.5)) {
         hasWaterGun = true; waterGunPowerupGroup.visible = false;
         document.getElementById('icon-water').classList.remove('opacity-40');
         showNotification('WATER CANNON!', 'Hold H to spray & grow grass', 2000);
@@ -2515,7 +3140,7 @@ function updateMower(deltaTime) {
             if (yardGrassStates[i] === 0) {
                 yardGrassStates[i] = 1; mowedCount++;
                 yardGrassMesh.getMatrixAt(i, dummy.matrix); dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
-                dummy.scale.y = 0.1; dummy.updateMatrix(); yardGrassMesh.setMatrixAt(i, dummy.matrix);
+                dummy.scale.y = MOWED_SCALE_Y; dummy.updateMatrix(); yardGrassMesh.setMatrixAt(i, dummy.matrix);
                 const bwx = (i % GRASS_GRID_SIZE) * GRASS_STEP - YARD_SIZE/2 + GRASS_STEP/2;
                 const bwz = Math.floor(i / GRASS_GRID_SIZE) * GRASS_STEP - YARD_SIZE/2 + GRASS_STEP/2;
                 yardGrassMesh.setColorAt(i, _tempColor.set(mowedTint(bwx, bwz)));
@@ -2533,6 +3158,18 @@ function updateMower(deltaTime) {
 // =============================================================================
 // CAMERA
 // =============================================================================
+// Slow orbit of the yard, used while the title screen is up.
+let titleCamAngle = 0.6;
+function updateTitleCamera(deltaTime) {
+    titleCamAngle += deltaTime * 0.045;
+    const r = 27;
+    const x = Math.sin(titleCamAngle) * r, z = Math.cos(titleCamAngle) * r;
+    camera.position.set(x, getElevation(x, z) + 8.5, z);
+    camera.lookAt(0, 2.0, 0);
+    if (skyDome) skyDome.position.copy(camera.position);
+    if (scene.fog) { scene.fog.near = 40; scene.fog.far = 180; }
+}
+
 function updateCamera() {
     let target;
     if (isGolfMode && golfState.active) target = golfState.pos;
@@ -2545,8 +3182,8 @@ function updateCamera() {
     const offsetY = Math.sin(camPitch) * camDistance;
     const offsetZ = Math.cos(camYaw) * Math.cos(camPitch) * camDistance;
 
-    const desired = new THREE.Vector3(target.x - offsetX, target.y + offsetY + 1, target.z - offsetZ);
-    camera.position.lerp(desired, 0.1);
+    _camDesired.set(target.x - offsetX, target.y + offsetY + 1, target.z - offsetZ);
+    camera.position.lerp(_camDesired, 0.1);
     const groundAtCam = getElevation(camera.position.x, camera.position.z);
     if (camera.position.y < groundAtCam + 1) camera.position.y = groundAtCam + 1;
     camera.lookAt(target.x, target.y + 1, target.z);
@@ -2666,12 +3303,15 @@ function sprayWater(deltaTime) {
         const maxRow = Math.min(GRASS_GRID_SIZE - 1, Math.floor((sprayZ + 1 + halfYard) / GRASS_STEP));
         for (let row = minRow; row <= maxRow; row++) for (let col = minCol; col <= maxCol; col++) {
             const idx = row * GRASS_GRID_SIZE + col;
+            if (yardBlocked[idx]) continue;          // buried under a rock/stump — never regrow
             yardGrassWatered[idx] = Math.min(2, yardGrassWatered[idx] + deltaTime * 3);
             if (yardGrassStates[idx] === 1) { yardGrassStates[idx] = 0; mowedCount--; }
             yardGrassMesh.getMatrixAt(idx, tempMatrix); tempMatrix.decompose(tempPosition, tempQuaternion, tempScale);
-            tempScale.y = 1 + yardGrassWatered[idx]; tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+            tempScale.y = 0.82 + deterministicHash(col + 3, row + 17) * 0.36 + yardGrassWatered[idx];
+            tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
             yardGrassMesh.setMatrixAt(idx, tempMatrix);
-            yardGrassMesh.setColorAt(idx, _tempColor.setHSL(0.33, 0.5, 0.4 + (Math.random()-0.5)*0.1));
+            grassTint(_tempColor, deterministicHash(col + 13, row + 29), deterministicHash(col - 7, row + 91));
+            yardGrassMesh.setColorAt(idx, _tempColor);
         }
         yardGrassMesh.instanceMatrix.needsUpdate = true;
         if (yardGrassMesh.instanceColor) yardGrassMesh.instanceColor.needsUpdate = true;
@@ -2703,8 +3343,10 @@ function updatePowerupsAndBomb(deltaTime, time) {
 // =============================================================================
 // GRASS CUTTING
 // =============================================================================
+// Returns the number of cells newly cut this call, so the caller can size the
+// mower's clipping discharge to how much grass actually went through the deck.
 function cutGrassAt(x, z, radius, isLaser) {
-    let changed = false, colorChanged = false;
+    let changed = false, colorChanged = false, cutCount = 0;
     if (isInfinityMode) {
         const cR = Math.ceil(radius / GRASS_STEP);
         const baseCx = Math.floor(x / GRASS_STEP), baseCz = Math.floor(z / GRASS_STEP);
@@ -2715,14 +3357,18 @@ function cutGrassAt(x, z, radius, isLaser) {
                 if (Math.hypot(gx - x, gz - z) > radius) continue;
                 const k = cellKey(cx, cz);
                 if (!worldMowedMap.get(k)) {
-                    worldMowedMap.set(k, true); changed = true;
+                    worldMowedMap.set(k, true); changed = true; cutCount++;
                     if (Math.random() < mowCoinChance) addCoins(1);
                     if (Math.random() < 0.3) spawnParticles(gx, gz, 0x4CAF50, 1, 0.5);
+                }
+                if (isInfinityWeed(cx, cz) && !worldWeedMap.get(k)) {
+                    worldWeedMap.set(k, true); changed = true;
+                    addCoins(2); spawnParticles(gx, gz, 0xFFD700, 6, 1);
                 }
             }
         }
         if (changed) { document.getElementById('progress-text').innerText = `${worldMowedMap.size} Sq`; lastMowerCellX = -999999; }
-        return;
+        return cutCount;
     }
     const hY = YARD_SIZE/2;
     const cR = Math.ceil(radius / GRASS_STEP);
@@ -2736,9 +3382,9 @@ function cutGrassAt(x, z, radius, isLaser) {
             if (Math.hypot(gx - x, gz - z) > radius) continue;
             const idx = row*GRASS_GRID_SIZE + col;
             if (yardGrassStates[idx] === 0) {
-                yardGrassStates[idx] = 1; mowedCount++; changed = true;
+                yardGrassStates[idx] = 1; mowedCount++; changed = true; cutCount++;
                 yardGrassMesh.getMatrixAt(idx, dummy.matrix); dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
-                dummy.scale.y = 0.1; dummy.updateMatrix(); yardGrassMesh.setMatrixAt(idx, dummy.matrix);
+                dummy.scale.y = MOWED_SCALE_Y; dummy.updateMatrix(); yardGrassMesh.setMatrixAt(idx, dummy.matrix);
                 yardGrassMesh.setColorAt(idx, _tempColor.set(mowedTint(gx, gz))); colorChanged = true;
                 if (Math.random() < mowCoinChance) addCoins(1);
                 if (Math.random() < 0.25) spawnParticles(gx, gz, isLaser ? 0x00ff00 : 0x4CAF50, 1, 0.5);
@@ -2759,11 +3405,23 @@ function cutGrassAt(x, z, radius, isLaser) {
         if (!bombSpawned && mowedCount >= YARD_GRASS_COUNT * 0.95) spawnBomb();
         checkYardComplete();
     }
+    return cutCount;
 }
 
 function checkGrassCollision() {
-    if (hoverTimer > 0) return; // floating — blades aren't touching the grass
-    cutGrassAt(mowerGroup.position.x, mowerGroup.position.z, mowerCutRadius, false);
+    if (hoverTimer > 0) return 0; // floating — blades aren't touching the grass
+    return cutGrassAt(mowerGroup.position.x, mowerGroup.position.z, mowerCutRadius, false);
+}
+
+// Clippings fly out of the deck's right-hand chute, angled back and away.
+function spawnDischarge(cutCount) {
+    if (cutCount <= 0) return;
+    const h = mowerState.heading;
+    const rx = Math.cos(h), rz = -Math.sin(h);                 // mower's right
+    const x = mowerGroup.position.x + rx * 0.55 - Math.sin(h) * 0.15;
+    const z = mowerGroup.position.z + rz * 0.55 - Math.cos(h) * 0.15;
+    const n = Math.min(3, 1 + (cutCount >> 1));
+    spawnParticles(x, z, 0x8FD94B, n, 0.55, rx * 3.4 - Math.sin(h) * 1.2, rz * 3.4 - Math.cos(h) * 1.2);
 }
 // =============================================================================
 // CRITTERS UPDATE
@@ -2852,8 +3510,10 @@ function updateWeather(deltaTime, time) {
     const activeYard = isGameRunning && !isInfinityMode && !isResetting;
     if (!activeYard) {
         rainIntensity = Math.max(0, rainIntensity - deltaTime);
+        rainbowOpacity = 0; puddleOpacity = 0;
         if (rainMesh) rainMesh.visible = false;
         if (rainbowGroup) rainbowGroup.visible = false;
+        for (const p of puddles) { p.visible = false; p.userData.placed = false; }
         return;
     }
 
@@ -2910,7 +3570,9 @@ function updateWeather(deltaTime, time) {
                 yardGrassMesh.getMatrixAt(ri, tempMatrix); tempMatrix.decompose(tempPosition, tempQuaternion, tempScale);
                 tempScale.set(1, 1 + Math.random()*0.3, 1); tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
                 yardGrassMesh.setMatrixAt(ri, tempMatrix);
-                yardGrassMesh.setColorAt(ri, _tempColor.setHSL(0.33, 0.5, 0.4 + (Math.random()-0.5)*0.1));
+                grassTint(_tempColor, deterministicHash((ri % GRASS_GRID_SIZE) + 13, ((ri / GRASS_GRID_SIZE) | 0) + 29),
+                                      deterministicHash((ri % GRASS_GRID_SIZE) - 7, ((ri / GRASS_GRID_SIZE) | 0) + 91));
+                yardGrassMesh.setColorAt(ri, _tempColor);
             }
         }
         if (any) { yardGrassMesh.instanceMatrix.needsUpdate = true; if (yardGrassMesh.instanceColor) yardGrassMesh.instanceColor.needsUpdate = true; updateProgressUI(); }
@@ -2943,9 +3605,22 @@ function gameLoop(time) {
     if (!isFinite(deltaTime) || deltaTime <= 0) deltaTime = 0.016;
     deltaTime = Math.min(deltaTime, 0.1); // clamp big frame gaps (e.g. tab was backgrounded)
 
-    // The title screen just idles the sky; nothing else simulates until a mode is chosen.
-    if (!isGameRunning) { if (renderer && scene && camera) renderer.render(scene, camera); return; }
+    // Title screen: the yard keeps living behind the menu — wind in the grass, a
+    // moving sun, a slow orbit — so the game is already inviting before you pick a mode.
+    if (!isGameRunning) {
+        if (!renderer || !scene || !camera) return;
+        updateWind(deltaTime, time);
+        updateWeather(deltaTime, time);   // lets a shower fade out behind the menu
+        updateDayNight(deltaTime);
+        updateAtmosphere(deltaTime, time);
+        updateParticles(deltaTime);
+        updateTitleCamera(deltaTime);
+        renderer.render(scene, camera);
+        return;
+    }
 
+    updateAdaptiveQuality(deltaTime);
+    updateWind(deltaTime, time);
     updateWeather(deltaTime, time);
     updateDayNight(deltaTime);
     updateAtmosphere(deltaTime, time);
@@ -2965,7 +3640,7 @@ function gameLoop(time) {
         else if (isDetectorMode) updateDetector(deltaTime);
         else if (isRcMode) updateRcCar(deltaTime);
         else if (isBasketballMode) updateBasketball(deltaTime);
-        else { updateMower(deltaTime); checkGrassCollision(); }
+        else { updateMower(deltaTime); spawnDischarge(checkGrassCollision()); }
 
         updateBalls(deltaTime);
         updateCamera();
@@ -2979,7 +3654,4 @@ window.onload = init;
 </script>
 </body>
 </html>
-    
-  </body>
-  
-</html>
+
