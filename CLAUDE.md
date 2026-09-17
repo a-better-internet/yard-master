@@ -71,6 +71,42 @@ Only the yard grid inside the fence can be cut. Anything out there that looks li
 lawn implies it can be mowed and confuses players. Use bushes, ferns, scrub, rocks and
 logs for ground cover instead — visually distinct from lawn tufts.
 
+### The yard is a square, so exclusion zones must be square
+
+Scattering scenery through a *circular* annulus whose inner radius is the fence's half
+width puts props inside the yard near the diagonals — at 45° a point at r = 20.9 has
+|x| = |z| = 14.8, well within a fence at ±20.4. Sample a square ring instead
+(`Math.max(|x|, |z|) < half + clearance`) and add each prop's own spread to the
+clearance, or bushes overhang the pickets.
+
+### Minigame prop groups must default to hidden
+
+`setGameMode()` sets `.visible` on every minigame group, but it only runs once the
+player enters a mode. A group left visible at build time sits in the middle of the yard
+on the title screen and through mowing — that's how the golf club, ball, flag and aim
+line ended up parked at the origin. Set `visible = false` where the group is created.
+
+### `font: <weight> <size>/<lh> inherit` is invalid and silently dropped
+
+`inherit` is not an accepted family inside the `font` shorthand, so the whole
+declaration is discarded and the text falls back to the browser's 16px default. Set
+`font-family` once on the container and use `font-weight` / `font-size` / `line-height`
+longhand on the children.
+
+### Unlit materials ignore the day/night cycle
+
+`MeshBasicMaterial` on distant scenery looks fine at noon and then stays a bright band
+through sunset and night while everything around it darkens. Anything meant to sit in
+the world needs a lit material (`MeshStandardMaterial`), or its colour has to be driven
+from the sky palette every frame.
+
+### Headless checks: CSS transitions crawl under swiftshader
+
+The software renderer starves the compositor, so a `transition: opacity .4s` reads about
+0.03 after 600ms and screenshots look like the element never appeared. Don't chase it as
+a bug — set `style.transition = 'none'` before asserting or screenshotting, or read the
+inline value rather than the computed one.
+
 ## Architecture notes
 
 - **Grass** is one `InstancedMesh` per lawn (yard + infinity), each instance a tuft of

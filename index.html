@@ -21,11 +21,78 @@
                 radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.20) 78%, rgba(0,0,0,0.42) 100%);
             opacity: 0; transition: opacity 1.2s ease;
         }
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
+        /* Sits outside #ui-layer so it stays readable while the HUD is hidden. */
+        #hud-hint-toast {
+            position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+            padding: 7px 16px; border-radius: 999px; z-index: 11; pointer-events: none;
+            background: rgba(14,22,18,.55); border: 1px solid rgba(255,255,255,.13);
+            backdrop-filter: blur(13px); -webkit-backdrop-filter: blur(13px);
+            color: rgba(255,255,255,.9);
+            font: 600 11px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .08em;
+            opacity: 0; transition: opacity .4s ease;
+        }
         .pointer-auto { pointer-events: auto; }
         #shop-modal { transition: opacity 0.3s ease; }
         .upgrade-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .tool-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.2rem; transition: all 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        /* ===== HUD =====
+           Dark glass rather than bright plastic: the game got naturalistic, and
+           the chrome has to sit quietly on top of it instead of shouting. */
+        #ui-layer { --hud-bg: rgba(14,22,18,.52); --hud-edge: rgba(255,255,255,.13);
+                    --hud-fg: rgba(255,255,255,.92); --hud-dim: rgba(255,255,255,.52);
+                    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        .hud-panel {
+            display: flex; align-items: stretch; gap: 1px; padding: 3px;
+            background: var(--hud-bg);
+            border: 1px solid var(--hud-edge);
+            border-radius: 11px;
+            box-shadow: 0 8px 26px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.07);
+            backdrop-filter: blur(13px) saturate(1.3);
+            -webkit-backdrop-filter: blur(13px) saturate(1.3);
+            color: var(--hud-fg);
+        }
+        .hud-btn {
+            position: relative; display: flex; align-items: center; gap: 6px;
+            padding: 6px 10px; border: 0; border-radius: 8px; cursor: pointer;
+            background: transparent; color: var(--hud-fg);
+            font-weight: 600; font-size: 11.5px; line-height: 1;
+            letter-spacing: .035em; white-space: nowrap;
+            transition: background .15s ease, color .15s ease;
+        }
+        .hud-btn:hover { background: rgba(255,255,255,.10); }
+        .hud-btn .glyph { font-size: 13px; line-height: 1; }
+        .hud-btn.is-active {
+            background: rgba(255,255,255,.15); color: #fff;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,.16), inset 0 -2px 0 var(--accent, #9fe870);
+        }
+        .hud-sep { width: 1px; margin: 5px 2px; background: var(--hud-edge); flex: none; }
+        .hud-stat { padding: 5px 12px; border-radius: 8px; text-align: left; }
+        .hud-stat .label {
+            font-weight: 700; font-size: 8.5px; line-height: 1;
+            letter-spacing: .16em; text-transform: uppercase; color: var(--hud-dim);
+        }
+        .hud-stat .value {
+            margin-top: 4px; font-weight: 700; font-size: 15px; line-height: 1;
+            font-variant-numeric: tabular-nums; transition: transform .15s ease;
+        }
+        .hud-stat.clickable { cursor: pointer; }
+        .hud-stat.clickable:hover { background: rgba(255,255,255,.09); }
+        .hud-hint { margin-top: 3px; font-weight: 700; font-size: 8px; line-height: 1; letter-spacing: .12em; color: var(--hud-dim); }
+        #progress-bar-container { width: 74px; height: 3px; margin-top: 5px; border-radius: 2px; background: rgba(255,255,255,.16); overflow: hidden; }
+        #progress-bar { height: 100%; border-radius: 2px; background: linear-gradient(90deg,#7fd14f,#b6ef6a); transition: width .3s ease; }
+
+        .tool-icon {
+            width: 30px; height: 30px; border-radius: 8px; display: flex;
+            align-items: center; justify-content: center; flex-direction: column;
+            font-weight: 700; font-size: 11px; line-height: 1; letter-spacing: .04em;
+            background: var(--hud-bg); border: 1px solid var(--hud-edge);
+            color: var(--hud-fg);
+            box-shadow: 0 4px 14px rgba(0,0,0,.25), inset 0 0 0 1px var(--tint, transparent);
+            backdrop-filter: blur(13px) saturate(1.3);
+            -webkit-backdrop-filter: blur(13px) saturate(1.3);
+            transition: opacity .3s ease;
+        }
+        .tool-icon .count { font-size: 8px; margin-top: 2px; color: var(--hud-dim); }
 
         /* ===== Title Screen ===== */
         #title-screen { transition: opacity 0.5s ease; }
@@ -44,6 +111,7 @@
 
 <div id="canvas-container"></div>
 <div id="vignette"></div>
+<div id="hud-hint-toast"></div>
 
 <!-- ===================== TITLE SCREEN ===================== -->
 <div id="title-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center text-center overflow-hidden"
@@ -68,52 +136,54 @@
             WASD / Arrows — Drive &nbsp;•&nbsp; Drag — Camera &nbsp;•&nbsp; Scroll — Zoom &nbsp;•&nbsp; E — Shop &nbsp;•&nbsp; Space — Action &nbsp;•&nbsp; Esc — Menu
         </div>
         <div class="text-white/80 text-[10px] sm:text-xs font-bold bg-black/25 px-5 py-1.5 rounded-full backdrop-blur-sm">
-            Pickups: G — Laser &nbsp;•&nbsp; H — Water &nbsp;•&nbsp; T — Torch &nbsp;•&nbsp; O — Day/Night &nbsp;•&nbsp; B — Hover &nbsp;•&nbsp; R — Call a shower
+            Pickups: G — Laser &nbsp;•&nbsp; H — Water &nbsp;•&nbsp; T — Torch &nbsp;•&nbsp; O — Day/Night &nbsp;•&nbsp; B — Hover &nbsp;•&nbsp; R — Call a shower &nbsp;•&nbsp; U — Hide interface
         </div>
     </div>
 </div>
 
 <!-- ===================== IN-GAME UI ===================== -->
-<div id="ui-layer" class="p-4 sm:p-8 opacity-0 transition-opacity duration-1000">
-    <div class="flex justify-between items-start w-full pointer-events-none gap-2 flex-wrap sm:flex-nowrap">
-        <div class="flex flex-col gap-2">
-            <div class="flex flex-wrap gap-2 pointer-events-auto items-start">
-                <button id="btn-menu" onclick="returnToMenu()" class="bg-gradient-to-r from-gray-700 to-gray-800 text-white px-4 py-3 rounded-2xl shadow-lg border border-white/20 font-black hover:opacity-90 transition min-w-[90px]">
-                    🏠 Menu
-                </button>
-                <div id="mode-buttons" class="flex flex-wrap gap-2">
-                    <button id="btn-golf-toggle" onclick="toggleGolfMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-indigo-400 font-black text-indigo-700 hover:bg-indigo-50 transition min-w-[100px]">⛳ Golf</button>
-                    <button id="btn-darts-toggle" onclick="toggleDartsMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-orange-400 font-black text-orange-700 hover:bg-orange-50 transition min-w-[100px]">🎯 Darts</button>
-                    <button id="btn-detector-toggle" onclick="toggleDetectorMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-teal-400 font-black text-teal-700 hover:bg-teal-50 transition min-w-[100px]">🔍 Detect</button>
-                    <button id="btn-rccar-toggle" onclick="toggleRcMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-pink-400 font-black text-pink-700 hover:bg-pink-50 transition min-w-[100px]">🚗 RC Car</button>
-                    <button id="btn-bball-toggle" onclick="toggleBasketballMode()" class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-amber-400 font-black text-amber-700 hover:bg-amber-50 transition min-w-[100px]">🏀 Hoops</button>
+<div id="ui-layer" class="p-3 sm:p-5 opacity-0 transition-opacity duration-1000">
+    <div class="flex justify-between items-start w-full pointer-events-none gap-3">
+        <div class="flex flex-col gap-2 items-start">
+            <div class="flex gap-2 items-start pointer-events-auto flex-wrap">
+                <div class="hud-panel">
+                    <button id="btn-menu" class="hud-btn" onclick="returnToMenu()"><span class="glyph">⌂</span>Menu</button>
                 </div>
-                <div class="bg-white/80 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-white/50 min-w-[120px]" id="hud-progress">
-                    <h2 class="text-xs text-gray-500 font-bold uppercase tracking-wider">Progress</h2>
-                    <div class="text-xl sm:text-2xl font-black text-green-600" id="progress-text">0.0%</div>
-                    <div class="w-full bg-gray-200 rounded-full h-2 mt-1 relative overflow-hidden" id="progress-bar-container">
-                        <div id="progress-bar" class="bg-green-600 h-2 rounded-full transition-all duration-300" style="width:0%"></div>
-                    </div>
+                <div id="mode-buttons" class="hud-panel">
+                    <button id="btn-golf-toggle"     class="hud-btn" style="--accent:#8f9dff" onclick="toggleGolfMode()"><span class="glyph">⛳</span>Golf</button>
+                    <button id="btn-darts-toggle"    class="hud-btn" style="--accent:#ffa45c" onclick="toggleDartsMode()"><span class="glyph">🎯</span>Darts</button>
+                    <button id="btn-detector-toggle" class="hud-btn" style="--accent:#5fd5c4" onclick="toggleDetectorMode()"><span class="glyph">🔍</span>Detect</button>
+                    <button id="btn-rccar-toggle"    class="hud-btn" style="--accent:#ff8ab5" onclick="toggleRcMode()"><span class="glyph">🚗</span>RC Car</button>
+                    <button id="btn-bball-toggle"    class="hud-btn" style="--accent:#ffc861" onclick="toggleBasketballMode()"><span class="glyph">🏀</span>Hoops</button>
                 </div>
             </div>
-            <div class="flex gap-2 pointer-events-auto mt-1">
-                <div id="icon-laser" class="tool-icon bg-red-500/20 text-red-700 border-2 border-red-500/30 opacity-40">G</div>
-                <div id="icon-water" class="tool-icon bg-blue-500/20 text-blue-700 border-2 border-blue-500/30 opacity-40">H</div>
-                <div id="icon-torch" class="tool-icon bg-orange-500/20 text-orange-700 border-2 border-orange-500/30 opacity-40 flex-col">
-                    <span class="leading-none mt-1">T</span>
-                    <span id="torch-count" class="text-[11px] leading-none font-black mt-0.5">0</span>
+            <div class="flex gap-1.5 pointer-events-auto">
+                <div id="icon-laser" class="tool-icon opacity-40" style="--tint:rgba(255,90,90,.35)">G</div>
+                <div id="icon-water" class="tool-icon opacity-40" style="--tint:rgba(90,170,255,.35)">H</div>
+                <div id="icon-torch" class="tool-icon opacity-40" style="--tint:rgba(255,160,70,.35)">
+                    T<span id="torch-count" class="count">0</span>
                 </div>
-                <div id="icon-orb" class="tool-icon bg-purple-500/20 text-purple-700 border-2 border-purple-500/30 opacity-40">O</div>
+                <div id="icon-orb" class="tool-icon opacity-40" style="--tint:rgba(190,120,255,.35)">O</div>
             </div>
         </div>
-        <div class="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-yellow-400 pointer-events-auto text-center cursor-pointer hover:bg-white transition flex-1 max-w-[200px]" onclick="toggleShop()" id="hud-coins">
-            <h2 class="text-xs text-gray-500 font-bold uppercase tracking-wider">Coins</h2>
-            <div class="text-2xl font-black text-yellow-500 transition-transform duration-150" id="coin-text">🪙 0</div>
-            <div class="text-[10px] text-green-600 font-bold mt-1 bg-green-100 rounded-full px-2 py-0.5 inline-block">UPGRADES (E)</div>
-        </div>
-        <div class="bg-white/80 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-lg border border-white/50 pointer-events-auto text-right min-w-[100px] sm:min-w-[120px]" id="hud-weeds">
-            <h2 class="text-xs text-gray-500 font-bold uppercase tracking-wider">Weeds</h2>
-            <div class="text-xl sm:text-2xl font-black text-yellow-500" id="weed-text">0/50</div>
+
+        <div class="hud-panel pointer-events-auto">
+            <div class="hud-stat" id="hud-progress">
+                <div class="label">Progress</div>
+                <div class="value" id="progress-text">0.0%</div>
+                <div id="progress-bar-container"><div id="progress-bar" style="width:0%"></div></div>
+            </div>
+            <div class="hud-sep"></div>
+            <div class="hud-stat clickable" id="hud-coins" onclick="toggleShop()">
+                <div class="label">Coins</div>
+                <div class="value" id="coin-text">🪙 0</div>
+                <div class="hud-hint">UPGRADES · E</div>
+            </div>
+            <div class="hud-sep" id="hud-weeds-sep"></div>
+            <div class="hud-stat" id="hud-weeds">
+                <div class="label">Weeds</div>
+                <div class="value" id="weed-text">0/50</div>
+            </div>
         </div>
     </div>
 
@@ -311,7 +381,7 @@ let birds = [];
 
 // Weather (rain is rare). weatherState drives the phase machine; rainIntensity/colorOvercast feed updateDayNight.
 let weatherState = 'clear';      // clear | incoming | raining | clearing
-let weatherTimer = 95;           // seconds until the first shower
+let weatherTimer = 420;          // seconds until the first shower
 let weatherPhase = 0;            // countdown within incoming/raining/clearing
 let rainIntensity = 0;           // 0..1 drives darken / rain / regrow / puddles
 let rainbowOpacity = 0, puddleOpacity = 0;
@@ -647,6 +717,7 @@ function startGame(mode) {
         document.getElementById('progress-bar-container').style.display = 'none';
         document.getElementById('progress-text').innerText = `${worldMowedMap.size} Sq`;
         document.getElementById('hud-weeds').style.display = 'none';
+        document.getElementById('hud-weeds-sep').style.display = 'none';
         mowerGroup.position.set(0, getElevation(0, 0), 0);
         lastMowerCellX = -999999; lastMowerCellZ = -999999;
         updateInfinityGrid(true);
@@ -657,6 +728,7 @@ function startGame(mode) {
         infRockMesh.visible = false; infStumpMesh.visible = false;
         document.getElementById('progress-bar-container').style.display = 'block';
         document.getElementById('hud-weeds').style.display = 'block';
+        document.getElementById('hud-weeds-sep').style.display = 'block';
         populateYard(true);
         mowerGroup.position.set(0, getElevation(0, 0), 0);
     }
@@ -667,11 +739,11 @@ function startGame(mode) {
     const title = document.getElementById('title-screen');
     title.style.opacity = '0';
     setTimeout(() => { title.style.display = 'none'; }, 500);
-    document.getElementById('ui-layer').style.opacity = '1';
     document.getElementById('vignette').style.opacity = '1';
 
     lastTime = performance.now();
     isGameRunning = true;
+    applyHudVisibility();          // reads isGameRunning, so it has to come after
 }
 
 function returnToMenu() {
@@ -681,13 +753,13 @@ function returnToMenu() {
     setGameMode('mower');
     Object.keys(keys).forEach(k => keys[k] = false);
     isGameRunning = false;
+    applyHudVisibility();
 
     if (audioCtx) {
         engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
         if (cicadaLevel) cicadaLevel.gain.setTargetAtTime(0, audioCtx.currentTime, 0.2);
     }
 
-    document.getElementById('ui-layer').style.opacity = '0';
     document.getElementById('vignette').style.opacity = '0';
     const title = document.getElementById('title-screen');
     title.style.display = 'flex';
@@ -1575,7 +1647,7 @@ function buildStaticEnvironment() {
     weedMesh = new THREE.InstancedMesh(makeDandelionGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, side: THREE.DoubleSide }), TOTAL_WEEDS);
     weedMesh.castShadow = true; weedMesh.frustumCulled = false; scene.add(weedMesh);
 
-    const bugGeo = new THREE.ConeGeometry(0.04, 0.12, 4); bugGeo.rotateX(Math.PI / 2);
+    const bugGeo = new THREE.ConeGeometry(0.028, 0.085, 4); bugGeo.rotateX(Math.PI / 2);
     bugMesh = new THREE.InstancedMesh(bugGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: false }), NUM_BUGS);
     bugMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bugMesh.frustumCulled = false;
     for (let i = 0; i < NUM_BUGS; i++) {
@@ -1590,7 +1662,7 @@ function buildStaticEnvironment() {
     fireflyGlowMesh = new THREE.InstancedMesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({
-            map: makeGlowTexture(), color: 0xBBFF66, transparent: true, opacity: 0,
+            map: makeGlowTexture(), color: 0xC8FF7A, transparent: true, opacity: 0,
             blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
         }),
         NUM_BUGS);
@@ -1700,15 +1772,15 @@ function buildHouse() {
         roughness: 1,
     });
     houseWindowMat = new THREE.MeshStandardMaterial({
-        color: 0x54718C, emissive: 0xFFE08A, emissiveIntensity: 0,
+        color: 0x54718C, emissive: 0xFFB74A, emissiveIntensity: 0,
         roughness: 0.08, metalness: 0.0,
     });
     // A couple of rooms stay dark, so the house reads as lived in.
     houseWindowDarkMat = new THREE.MeshStandardMaterial({
-        color: 0x54718C, emissive: 0x2A2418, emissiveIntensity: 0,
+        color: 0x54718C, emissive: 0x3A2A12, emissiveIntensity: 0,
         roughness: 0.08, metalness: 0.0,
     });
-    houseBulbMat = new THREE.MeshStandardMaterial({ color: 0xFFD9A0, emissive: 0xFFB347, emissiveIntensity: 0 });
+    houseBulbMat = new THREE.MeshStandardMaterial({ color: 0xFFD9A0, emissive: 0xFF9A2E, emissiveIntensity: 0 });
 
     const b = partBuilder();
     const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
@@ -1847,7 +1919,7 @@ function buildHouse() {
         back.position.set(x, 3.6, frontZ + 0.14); houseGroup.add(back);
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 10), houseBulbMat);
         bulb.position.set(x, 3.6, frontZ + 0.34); houseGroup.add(bulb);
-        const light = new THREE.PointLight(0xffb347, 0, 16, 2);
+        const light = new THREE.PointLight(0xff9426, 0, 16, 2);
         light.position.set(x, 3.6, frontZ + 0.8); houseGroup.add(light);
         houseLights.push(light);
     };
@@ -1967,7 +2039,7 @@ function buildGardenPath(startZ, endZ) {
 // beyond the fence is a flat green plate running to the fog, which kills any
 // sense that the yard sits somewhere.
 function buildTreeline() {
-    const COUNT = 420;
+    const COUNT = 520;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
 
     // One instanced mesh per species; each tree picks a species by hash.
@@ -1993,8 +2065,9 @@ function buildTreeline() {
         const k = h3 < 0.22 ? 1 : (h3 < 0.42 ? 2 : 0);
         const mesh = species[k];
         const slot = mesh.count++;
-        // Leave the house's plot, the shed and the pole line clear.
-        const blocked = (z < -YARD_SIZE / 2 && Math.abs(x) < 18 && rad < 62)
+        // Leave the yard itself, the house plot, the shed and the pole line clear.
+        const blocked = Math.max(Math.abs(x), Math.abs(z)) < YARD_SIZE / 2 + 4
+            || (z < -YARD_SIZE / 2 && Math.abs(x) < 18 && rad < 62)
             || Math.hypot(x + YARD_SIZE / 2 + 6.5, z - YARD_SIZE / 2 - 5.5) < 7
             || Math.abs(x + YARD_SIZE / 2 + 30) < 5;
         if (blocked) { mesh.setMatrixAt(slot, hidden); continue; }
@@ -2018,23 +2091,24 @@ function buildTreeline() {
 // looks like the grass inside the fence reads as mowable, and it isn't. Bushes,
 // ferns, fallen logs, rocks and wildflower clumps say "scenery" instead.
 function buildOutsideScenery() {
-    const INNER = YARD_SIZE / 2 + 2.2, OUTER = 108;
+    const OUTER = 108;
     // Keeps the house plot, the garden path, the shed and the pole line clear.
     const blocked = (x, z) => (z < -YARD_SIZE / 2 && Math.abs(x) < 17 && z > -46)
         || Math.hypot(x + YARD_SIZE / 2 + 6.5, z - YARD_SIZE / 2 - 5.5) < 5.5
         || Math.abs(x + YARD_SIZE / 2 + 30) < 3.5;
 
     // Scatter n points through the annulus, skipping blocked ground.
-    const scatter = (n, seed, innerR, outerR) => {
+    const FENCE_HALF = YARD_SIZE / 2 + 0.4;
+    // `clear` is how far a prop's own spread reaches, so nothing overhangs the pickets.
+    const scatter = (n, seed, outer, clear) => {
         const out = [];
         for (let i = 0; i < n; i++) {
             const h1 = deterministicHash(i * 1.37 + seed, i * 0.61 - seed * 2);
             const h2 = deterministicHash(i * 2.71 - seed, i * 1.93 + seed * 3);
             const h3 = deterministicHash(i * 0.83 + seed * 5, i * 3.47 - seed);
-            const ang = h1 * Math.PI * 2;
-            // sqrt keeps the ring evenly covered instead of bunching at the inside
-            const rad = Math.sqrt(innerR * innerR + h2 * (outerR * outerR - innerR * innerR));
-            const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
+            const x = (h1 - 0.5) * 2 * outer, z = (h2 - 0.5) * 2 * outer;
+            // Square ring, matching the fence's shape rather than a circle.
+            if (Math.max(Math.abs(x), Math.abs(z)) < FENCE_HALF + clear) continue;
             if (!blocked(x, z)) out.push([x, z, h1, h2, h3]);
         }
         return out;
@@ -2067,7 +2141,7 @@ function buildOutsideScenery() {
 
     // --- bushes: the main filler ---
     const bushGeo = uvScale(new THREE.IcosahedronGeometry(1, 1), 2.4, 2.4);
-    place(bushGeo, foliageMat, scatter(1200, 3, INNER, OUTER),
+    place(bushGeo, foliageMat, scatter(1500, 3, OUTER, 4.2),
           (d, tint, x, z, h1, h2, h3) => {
               const r = 0.8 + h3 * 1.5;
               d.position.set(x, getElevation(x, z) + r * 0.45, z);
@@ -2079,7 +2153,7 @@ function buildOutsideScenery() {
     // A flatter, wider layer hugging the ground. This is what stops the field
     // outside the fence reading as bare fairway with props standing on it.
     const scrubGeo = uvScale(new THREE.IcosahedronGeometry(1, 0), 2.4, 2.4);
-    place(scrubGeo, foliageMat, scatter(1500, 71, INNER - 1, OUTER),
+    place(scrubGeo, foliageMat, scatter(1900, 71, OUTER, 3.4),
           (d, tint, x, z, h1, h2, h3) => {
               // Small and flat: scrub, not boulders.
               const r = 0.55 + h2 * 0.85;
@@ -2090,7 +2164,7 @@ function buildOutsideScenery() {
           });
 
     // --- ferns: a low cluster of fronds ---
-    place(makeFernGeometry(), foliageMat, scatter(900, 11, INNER, OUTER * 0.7),
+    place(makeFernGeometry(), foliageMat, scatter(1100, 11, OUTER * 0.7, 1.6),
           (d, tint, x, z, h1, h2, h3) => {
               d.position.set(x, getElevation(x, z), z);
               d.rotation.set(0, h1 * 6.3, 0);
@@ -2100,7 +2174,7 @@ function buildOutsideScenery() {
 
     // --- fallen logs ---
     place(uvScale(new THREE.CylinderGeometry(0.34, 0.42, 4.4, 7), 1.6, 3), barkMat,
-          scatter(45, 23, INNER + 4, OUTER * 0.8),
+          scatter(60, 23, OUTER * 0.8, 4.0),
           (d, tint, x, z, h1, h2, h3) => {
               d.position.set(x, getElevation(x, z) + 0.3, z);
               d.rotation.set(Math.PI / 2 + (h3 - 0.5) * 0.14, h1 * 6.3, 0);
@@ -2110,7 +2184,7 @@ function buildOutsideScenery() {
 
     // --- rocks and boulders ---
     place(new THREE.DodecahedronGeometry(1, 0), rockMat,
-          scatter(160, 37, INNER + 2, OUTER * 0.85),
+          scatter(200, 37, OUTER * 0.85, 2.6),
           (d, tint, x, z, h1, h2, h3) => {
               const r = 0.35 + h3 * 1.2;
               d.position.set(x, getElevation(x, z) + r * 0.25, z);
@@ -2121,7 +2195,7 @@ function buildOutsideScenery() {
 
     // --- wildflower clumps ---
     const flowerMat = new THREE.MeshStandardMaterial({ roughness: 0.65, side: THREE.DoubleSide, vertexColors: true });
-    place(makeFlowerGeometry(), flowerMat, scatter(420, 53, INNER, OUTER * 0.55),
+    place(makeFlowerGeometry(), flowerMat, scatter(520, 53, OUTER * 0.55, 1.2),
           (d, tint, x, z, h1, h2, h3) => {
               d.position.set(x, getElevation(x, z), z);
               d.rotation.set((h2 - 0.5) * 0.25, h1 * 6.3, (h3 - 0.5) * 0.25);
@@ -2170,8 +2244,15 @@ function buildNeighbourhood() {
         map: makeTex('shingle', 256, drawShingles), roughness: 0.95,
     });
     const trimMat = new THREE.MeshStandardMaterial({ color: 0xF2EEE0, roughness: 0.8 });
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x4A3524, roughness: 0.8 });
+    const brickMat = new THREE.MeshStandardMaterial({
+        map: makeTex('brick', 256, drawBrick), roughness: 0.95,
+    });
+    const stoneMat = new THREE.MeshStandardMaterial({
+        map: makeTex('flagstone', 256, drawFlagstone), roughness: 1,
+    });
     neighbourGlassMat = new THREE.MeshStandardMaterial({
-        color: 0x46627C, emissive: 0xFFD98A, emissiveIntensity: 0, roughness: 0.15,
+        color: 0x46627C, emissive: 0xFFAE49, emissiveIntensity: 0, roughness: 0.15,
     });
     const glassMat = neighbourGlassMat;
 
@@ -2218,10 +2299,39 @@ function buildNeighbourhood() {
         const gg = new THREE.ExtrudeGeometry(gable, { depth: 0.25, bevelEnabled: false });
         for (const sx of [-1, 1]) b.add(trimMat, gg.clone(), ...at(sx * W / 2, WALL - 0.6, 0), 0, rot + Math.PI / 2, 0);
 
-        for (const wx of [-W / 4, W / 4]) for (const wy of [WALL * 0.28, WALL * 0.68]) {
-            b.add(trimMat,  box(1.5 * scale, 1.5 * scale, 0.15), ...at(wx, wy, D / 2 + 0.05), 0, rot, 0);
-            b.add(glassMat, box(1.1 * scale, 1.1 * scale, 0.1),  ...at(wx, wy, D / 2 + 0.14), 0, rot, 0);
+        // Foundation course, so the walls don't grow straight out of the grass.
+        b.add(stoneMat, uvScale(box(W + 0.3, 2.2, D + 0.3), W / 2, 1),
+              ...at(0, -0.9, 0), 0, rot, 0);
+        // Storey band and corner boards
+        b.add(trimMat, box(W + 0.1, 0.22, D + 0.1), ...at(0, WALL * 0.5 - 0.6, 0), 0, rot, 0);
+        for (const cx of [-W / 2, W / 2]) for (const cz of [-D / 2, D / 2]) {
+            b.add(trimMat, box(0.28, WALL, 0.28), ...at(cx, WALL / 2 - 0.6, cz), 0, rot, 0);
         }
+
+        // Windows: two storeys on the front, one row down each side.
+        const win = (lx, ly, lz, wry) => {
+            const nx = Math.sin(wry), nz = Math.cos(wry);
+            b.add(trimMat,  box(1.5 * scale, 1.5 * scale, 0.15),
+                  ...at(lx + nx * 0.05, ly, lz + nz * 0.05), 0, rot + wry, 0);
+            b.add(glassMat, box(1.1 * scale, 1.1 * scale, 0.1),
+                  ...at(lx + nx * 0.14, ly, lz + nz * 0.14), 0, rot + wry, 0);
+        };
+        for (const wx of [-W / 4, W / 4]) for (const wy of [WALL * 0.28, WALL * 0.68]) win(wx, wy, D / 2, 0);
+        for (const sx of [-1, 1]) for (const wy of [WALL * 0.3, WALL * 0.7]) win(sx * W / 2, wy, -D / 5, sx * Math.PI / 2);
+
+        // Front door under a small shed hood, on a step.
+        b.add(trimMat,  box(1.5 * scale, 2.6 * scale, 0.16), ...at(0, 0.7 + scale, D / 2 + 0.06), 0, rot, 0);
+        b.add(doorMat,  box(1.1 * scale, 2.2 * scale, 0.14), ...at(0, 0.55 + scale, D / 2 + 0.15), 0, rot, 0);
+        b.add(roofMat,  uvScale(box(2.4 * scale, 0.16, 1.2), 2, 1),
+              ...at(0, 1.9 + 1.6 * scale, D / 2 + 0.5), 0.3, rot, 0);
+        b.add(stoneMat, uvScale(box(2.2 * scale, 0.3, 1.1), 2, 1), ...at(0, -0.45, D / 2 + 0.5), 0, rot, 0);
+
+        // Brick chimney on the gable end, poking past the ridge.
+        const chTop = WALL - 0.6 + RISE + 2.2 * scale;
+        b.add(brickMat, uvScale(box(1.4 * scale, chTop + 3, 1.6 * scale), 1.5, chTop),
+              ...at(W / 2 + 0.4, (chTop - 3) / 2, -D / 5), 0, rot, 0);
+        b.add(stoneMat, uvScale(box(1.8 * scale, 0.3, 2.0 * scale), 2, 2),
+              ...at(W / 2 + 0.4, chTop + 0.15, -D / 5), 0, rot, 0);
     }
     b.build(yardEnvironmentGroup);
 
@@ -2321,38 +2431,104 @@ function buildUtilityPoles() {
 // line before; fog turns these into hazy blue ridges for free, which is what
 // sells the yard as sitting somewhere in a landscape.
 function buildDistantHills() {
-    const SEGS = 150;
-    for (const [radius, amp, base, hue, lift] of [[118, 11, 5, 0.30, 0.30], [162, 20, 7, 0.55, 0.42]]) {
+    const SEGS = 180;
+    // [footRadius, width, height, hue, lightness, seed]
+    const layers = [
+        [ 92, 48, 15, 0.29, 0.30, 1.7],
+        [132, 52, 25, 0.31, 0.26, 4.3],
+        [170, 44, 33, 0.33, 0.22, 8.1],
+    ];
+
+    for (const [foot, width, height, hue, light, k] of layers) {
         const pos = [], col = [];
         const c = new THREE.Color();
-        const heightAt = (a) =>
-            base + amp * (0.5 + 0.28 * Math.sin(a * 3.1 + radius) + 0.16 * Math.sin(a * 7.7 - radius)
-                              + 0.1 * Math.sin(a * 13.3 + 2.0));
+        // Three octaves so the skyline has both broad masses and small notches.
+        const heightAt = (a) => height * (0.42 + 0.30 * Math.sin(a * 2.7 + k)
+                                               + 0.17 * Math.sin(a * 6.3 - k * 2)
+                                               + 0.09 * Math.sin(a * 11.9 + k * 3));
+        // The crest wanders in plan as well as height, so ridges overlap and read
+        // as separate spurs rather than one smooth cone.
+        const crestAt = (a) => foot + width * (0.34 + 0.13 * Math.sin(a * 3.9 - k)
+                                                    + 0.07 * Math.sin(a * 8.1 + k));
+
+        const push = (x, y, z, shade, tone) => {
+            pos.push(x, y, z);
+            c.setHSL(hue + tone * 0.045, 0.30 - tone * 0.08, light * shade);
+            col.push(c.r, c.g, c.b);
+        };
+
         for (let i = 0; i < SEGS; i++) {
             const a0 = (i / SEGS) * Math.PI * 2, a1 = ((i + 1) / SEGS) * Math.PI * 2;
-            const r0 = radius, r1 = radius;
             const h0 = heightAt(a0), h1 = heightAt(a1);
-            const x0 = Math.cos(a0) * r0, z0 = Math.sin(a0) * r0;
-            const x1 = Math.cos(a1) * r1, z1 = Math.sin(a1) * r1;
-            // A quad from well below grade up to the ridge line.
-            pos.push(x0, -8, z0,  x1, -8, z1,  x1, h1, z1);
-            pos.push(x0, -8, z0,  x1, h1, z1,  x0, h0, z0);
-            // Darker at the base, lighter at the ridge, so the band has form.
-            const shade = (h) => { c.setHSL(hue, 0.22, lift - 0.05 + h * 0.006); return [c.r, c.g, c.b]; };
-            const lo = shade(0), a = shade(h0), bq = shade(h1);
-            col.push(...lo, ...lo, ...bq, ...lo, ...bq, ...a);
+            const c0 = crestAt(a0), c1 = crestAt(a1);
+            // Patchy tone: woodland on some flanks, open pasture on others.
+            const t0 = 0.5 + 0.5 * Math.sin(a0 * 5.1 + k * 1.7);
+            const t1 = 0.5 + 0.5 * Math.sin(a1 * 5.1 + k * 1.7);
+            const P = (r, a) => [Math.cos(a) * r, Math.sin(a) * r];
+
+            const [ix0, iz0] = P(foot, a0),       [ix1, iz1] = P(foot, a1);
+            const [cx0, cz0] = P(c0, a0),         [cx1, cz1] = P(c1, a1);
+            const [ox0, oz0] = P(foot + width, a0), [ox1, oz1] = P(foot + width, a1);
+
+            // Inner slope — this is the face the player actually sees.
+            push(ix0, -5, iz0, 0.62, t0); push(ix1, -5, iz1, 0.62, t1); push(cx1, h1, cz1, 1.0, t1);
+            push(ix0, -5, iz0, 0.62, t0); push(cx1, h1, cz1, 1.0, t1); push(cx0, h0, cz0, 1.0, t0);
+            // Back slope, so the ridge has a real crest instead of a cut edge.
+            push(cx0, h0, cz0, 1.0, t0); push(cx1, h1, cz1, 1.0, t1); push(ox1, -5, oz1, 0.5, t1);
+            push(cx0, h0, cz0, 1.0, t0); push(ox1, -5, oz1, 0.5, t1); push(ox0, -5, oz0, 0.5, t0);
         }
+
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
         geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
         geo.computeVertexNormals();
-        const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-            vertexColors: true, side: THREE.DoubleSide,
+        // Lit, not unlit: the old MeshBasicMaterial ignored the day/night cycle
+        // entirely, so the hills stayed a pale band through sunset and night.
+        const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+            vertexColors: true, roughness: 1, metalness: 0, flatShading: true,
         }));
+        mesh.castShadow = false; mesh.receiveShadow = false;
         mesh.frustumCulled = false;
-        mesh.renderOrder = -900;          // behind everything except the sky
         yardEnvironmentGroup.add(mesh);
+
+        // Forest on the nearest ridge, which is the one close enough to read as
+        // individual trees rather than texture.
+        if (foot < 100) buildRidgeForest(foot, heightAt, crestAt, hue);
     }
+}
+
+// Dark conifer silhouettes along a ridge crest. One instanced draw, and it is
+// what stops the near hill reading as a smooth painted cut-out.
+function buildRidgeForest(foot, heightAt, crestAt, hue) {
+    const COUNT = 320;
+    const geo = new THREE.ConeGeometry(1, 3.4, 5);
+    geo.translate(0, 1.7, 0);
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({
+        roughness: 1, flatShading: true,
+    }), COUNT);
+    mesh.castShadow = false; mesh.frustumCulled = false;
+
+    const d = new THREE.Object3D(), tint = new THREE.Color();
+    for (let i = 0; i < COUNT; i++) {
+        const h1 = deterministicHash(i * 1.9 + 0.7, i * 0.53 - 2.2);
+        const h2 = deterministicHash(i * 3.1 - 1.4, i * 2.17 + 5.5);
+        const a = (i / COUNT) * Math.PI * 2 + (h1 - 0.5) * 0.06;
+        // Scatter down the inner flank from the crest, not just along it.
+        const t = 0.25 + h2 * 0.7;
+        const r = foot + (crestAt(a) - foot) * t;
+        const y = heightAt(a) * Math.pow(t, 0.7) - 1.2;
+        const sc = 1.5 + h1 * 2.2;
+        d.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+        d.rotation.set(0, h2 * 6.3, 0);
+        d.scale.set(sc * 0.8, sc * (0.9 + h2 * 0.7), sc * 0.8);
+        d.updateMatrix();
+        mesh.setMatrixAt(i, d.matrix);
+        tint.setHSL(hue - 0.02 + h2 * 0.04, 0.42, 0.14 + h1 * 0.1);
+        mesh.setColorAt(i, tint);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    yardEnvironmentGroup.add(mesh);
 }
 
 // A real picket fence instead of a blank slab wall: low enough to see the
@@ -2830,7 +3006,7 @@ function buildItemsAndPowerups() {
 // RC CAR / BASKETBALL / GOLF / DARTS / DETECTOR BUILDING
 // =============================================================================
 function buildRcCar() {
-    rcGroup = new THREE.Group(); scene.add(rcGroup);
+    rcGroup = new THREE.Group(); rcGroup.visible = false; scene.add(rcGroup);
     rcMesh = new THREE.Group();
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.5), new THREE.MeshStandardMaterial({color: 0xff0088, metalness: 0.5}));
     body.position.y = 0.1; body.castShadow = true; rcMesh.add(body);
@@ -2884,7 +3060,7 @@ function spawnRcRing() {
 }
 
 function buildGolf() {
-    golfGroup = new THREE.Group(); scene.add(golfGroup);
+    golfGroup = new THREE.Group(); golfGroup.visible = false; scene.add(golfGroup);
     golfBallMesh = new THREE.Mesh(new THREE.SphereGeometry(golfState.radius, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 }));
     golfBallMesh.castShadow = true; golfGroup.add(golfBallMesh);
     golfHoleGroup = new THREE.Group();
@@ -2907,7 +3083,7 @@ function buildGolf() {
 }
 
 function buildDarts() {
-    dartsGroup = new THREE.Group(); scene.add(dartsGroup);
+    dartsGroup = new THREE.Group(); dartsGroup.visible = false; scene.add(dartsGroup);
     dartMesh = new THREE.Group();
     const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.3, 8), new THREE.MeshStandardMaterial({color: 0xcccccc, metalness: 0.8})); tip.position.y = -0.15; tip.castShadow = true;
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 8), new THREE.MeshStandardMaterial({color: 0xee2222})); body.position.y = -0.75; body.castShadow = true;
@@ -2931,7 +3107,7 @@ function buildDarts() {
 }
 
 function buildDetector() {
-    detectorGroup = new THREE.Group(); scene.add(detectorGroup);
+    detectorGroup = new THREE.Group(); detectorGroup.visible = false; scene.add(detectorGroup);
     detectorMesh = new THREE.Group();
     const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.15, 16, 1, true, 0, Math.PI), new THREE.MeshStandardMaterial({color: 0x111111, side: THREE.DoubleSide}));
     cuff.rotation.x = Math.PI / 4; cuff.position.set(0, 1.45, -0.15);
@@ -3122,6 +3298,25 @@ function showNotification(title, subtitle, duration) {
     setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translate(-50%, -50%) scale(0.75)'; }, duration);
 }
 
+// The HUD hides on U (or F1). Kept as state rather than a straight style write
+// so starting a game or returning to the menu doesn't silently bring it back.
+let hudHidden = false;
+function applyHudVisibility() {
+    const el = document.getElementById('ui-layer');
+    el.style.opacity = (isGameRunning && !hudHidden) ? '1' : '0';
+    el.style.pointerEvents = hudHidden ? 'none' : '';
+}
+function toggleHud() {
+    hudHidden = !hudHidden;
+    applyHudVisibility();
+    // The hint lives outside #ui-layer so it can still be seen while the HUD is off.
+    const hint = document.getElementById('hud-hint-toast');
+    hint.textContent = hudHidden ? 'Interface hidden — press U to restore' : 'Interface shown';
+    hint.style.opacity = '1';
+    clearTimeout(toggleHud._t);
+    toggleHud._t = setTimeout(() => { hint.style.opacity = '0'; }, 2200);
+}
+
 function updateTorchUI() {
     const icon = document.getElementById('icon-torch');
     const count = document.getElementById('torch-count');
@@ -3307,6 +3502,8 @@ function setupInput() {
             case 'KeyG': if (isGameRunning && !isGolfMode && !isDartsMode && !isBasketballMode && !isDetectorMode && !isRcMode && mowerHasLaser && laserCooldown <= 0) { fireLaser(); laserCooldown = 0.2; } break;
             case 'KeyT': if (isGameRunning && torchesInventory > 0 && !isDetectorMode && !isRcMode) placeTorch(); break;
             case 'KeyO': if (isGameRunning && hasOrb) toggleDayNight(); break;
+            case 'KeyU': if (isGameRunning) toggleHud(); break;
+            case 'F1':   if (isGameRunning) { e.preventDefault(); toggleHud(); } break;
             case 'KeyL': if (isGameRunning && !isInfinityMode) toggleDartsMode(); break;
             case 'KeyM': if (isGameRunning && !isInfinityMode) toggleDetectorMode(); break;
             case 'KeyR': // Call in a shower on demand (rain regrows grass and paints puddles)
@@ -3370,11 +3567,11 @@ function setGameMode(mode) {
     const btnRc = document.getElementById('btn-rccar-toggle');
     const btnBball = document.getElementById('btn-bball-toggle');
 
-    btnGolf.innerText = '⛳ Golf'; btnGolf.classList.replace('text-green-700', 'text-indigo-700'); btnGolf.classList.replace('border-green-400', 'border-indigo-400');
-    btnDarts.innerText = '🎯 Darts'; btnDarts.classList.replace('text-green-700', 'text-orange-700'); btnDarts.classList.replace('border-green-400', 'border-orange-400');
-    btnDetector.innerText = '🔍 Detect'; btnDetector.classList.replace('text-green-700', 'text-teal-700'); btnDetector.classList.replace('border-green-400', 'border-teal-400');
-    btnRc.innerText = '🚗 RC Car'; btnRc.classList.replace('text-green-700', 'text-pink-700'); btnRc.classList.replace('border-green-400', 'border-pink-400');
-    btnBball.innerText = '🏀 Hoops'; btnBball.classList.replace('text-green-700', 'text-amber-700'); btnBball.classList.replace('border-green-400', 'border-amber-400');
+    btnGolf.classList.toggle('is-active', isGolfMode);
+    btnDarts.classList.toggle('is-active', isDartsMode);
+    btnDetector.classList.toggle('is-active', isDetectorMode);
+    btnRc.classList.toggle('is-active', isRcMode);
+    btnBball.classList.toggle('is-active', isBasketballMode);
 
     golfState.charging = false; dartsState.charging = false; bballState.charging = false;
     Object.keys(keys).forEach(k => keys[k] = false);
@@ -3399,30 +3596,25 @@ function setGameMode(mode) {
     document.getElementById('bball-ui').style.display = isBasketballMode ? 'flex' : 'none';
 
     if (isGolfMode) {
-        btnGolf.innerText = '🚜 Mower'; btnGolf.classList.replace('text-indigo-700', 'text-green-700'); btnGolf.classList.replace('border-indigo-400', 'border-green-400');
         golfState.pos.copy(mowerGroup.position); golfState.pos.y = getElevation(golfState.pos.x, golfState.pos.z) + 2;
         golfState.vel.set(0, 0, 0); golfState.active = true; golfState.strokes = 0; golfState.aimYaw = camYaw;
         spawnGolfHole(); camDistance = 8; camPitch = 0.4;
     } else if (isDartsMode) {
-        btnDarts.innerText = '🚜 Mower'; btnDarts.classList.replace('text-orange-700', 'text-green-700'); btnDarts.classList.replace('border-orange-400', 'border-green-400');
         dartsState.pos.copy(mowerGroup.position); dartsState.pos.y = getElevation(dartsState.pos.x, dartsState.pos.z) + 2;
         dartsState.vel.set(0, 0, 0); dartsState.active = true; dartsState.aimYaw = camYaw; dartsState.state = 'idle';
         spawnDartTarget(); camDistance = 10; camPitch = 0.5;
         document.getElementById('darts-score').innerText = `Score: ${dartsState.score}`;
     } else if (isBasketballMode) {
-        btnBball.innerText = '🚜 Mower'; btnBball.classList.replace('text-amber-700', 'text-green-700'); btnBball.classList.replace('border-amber-400', 'border-green-400');
         bballState.pos.copy(mowerGroup.position); bballState.pos.y = getElevation(bballState.pos.x, bballState.pos.z) + 2;
         bballState.vel.set(0, 0, 0); bballState.active = true; bballState.aimYaw = camYaw; bballState.state = 'idle';
         camDistance = 12; camPitch = 0.4;
         document.getElementById('bball-score').innerText = `Score: ${bballState.score}`;
     } else if (isDetectorMode) {
-        btnDetector.innerText = '🚜 Mower'; btnDetector.classList.replace('text-teal-700', 'text-green-700'); btnDetector.classList.replace('border-teal-400', 'border-green-400');
         detectorState.pos.copy(mowerGroup.position); detectorState.pos.y = getElevation(detectorState.pos.x, detectorState.pos.z);
         detectorState.speed = 0; detectorState.heading = camYaw; camDistance = 6; camPitch = 0.6;
         document.getElementById('detector-signal-bar').style.width = '0%';
         document.getElementById('detector-status').innerText = 'SEARCHING...';
     } else if (isRcMode) {
-        btnRc.innerText = '🚜 Mower'; btnRc.classList.replace('text-pink-700', 'text-green-700'); btnRc.classList.replace('border-pink-400', 'border-green-400');
         rcState.pos.copy(mowerGroup.position); rcState.pos.y = getRcElevationWithJumps(rcState.pos.x, rcState.pos.z) + 0.1;
         rcState.vel.set(0,0,0); rcState.speed = 0; rcState.heading = camYaw; rcState.isAirborne = false;
         spawnRcRing(); camDistance = 4; camPitch = 0.3;
@@ -3955,21 +4147,26 @@ function updateBugs(deltaTime, time) {
         if (b.vel.lengthSq() > 0.01) tempQuaternion.setFromAxisAngle(_bugUpAxis, Math.atan2(b.vel.x, b.vel.z));
         const flap = 1 + Math.sin(time/100 * bugSpeed + b.seed)*0.3; tempScale.set(flap, flap, flap);
         tempMatrix.compose(tempPosition, tempQuaternion, tempScale); bugMesh.setMatrixAt(i, tempMatrix);
-        // Night fireflies glow; daytime butterflies are pastel
-        if (isNightTime) { const pulse = 0.5 + 0.5 * Math.sin(time/200 + b.seed*3); _tempColor.setRGB(0.6 + 0.4*pulse, 1.0, 0.3 * pulse); }
-        else _tempColor.setHSL(b.hue, 0.6, 0.75);
+        // Daytime butterflies are pastel; at night the glow block below takes over.
+        _tempColor.setHSL(b.hue, 0.6, 0.75);
         bugMesh.setColorAt(i, _tempColor); colorDirty = true;
 
         if (glowing) {
-            // Billboard the halo and pulse it out of phase with its bug.
-            const pulse = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(time / 190 + b.seed * 3), 2);
-            const gs = (0.5 + pulse * 0.55);
+            // A high power on the sine gives a narrow flare with long dark gaps
+            // between — a flash, not a lamp. Each bug runs at its own rate.
+            const rate = 0.9 + (b.seed % 1) * 1.1;
+            const flash = Math.pow(Math.max(0, Math.sin(time * 0.001 * rate + b.seed * 5)), 10);
+            const pulse = 0.04 + 0.96 * flash;
+            const gs = 0.12 + pulse * 0.26;          // much smaller than before
             tempQuaternion.copy(camera.quaternion);
             tempScale.set(gs, gs, gs);
             tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
             fireflyGlowMesh.setMatrixAt(i, tempMatrix);
-            _tempColor.setRGB(0.45 + 0.4 * pulse, 0.85 + 0.15 * pulse, 0.18 * pulse);
+            _tempColor.setRGB(0.55 * pulse, 0.78 * pulse, 0.12 * pulse);
             fireflyGlowMesh.setColorAt(i, _tempColor);
+            // The body glows with the flash instead of staying lit all night.
+            _tempColor.setRGB(0.25 + 0.6 * pulse, 0.35 + 0.6 * pulse, 0.08 + 0.1 * pulse);
+            bugMesh.setColorAt(i, _tempColor);
         }
     }
     bugMesh.instanceMatrix.needsUpdate = true;
@@ -3979,7 +4176,7 @@ function updateBugs(deltaTime, time) {
         if (fireflyGlowMesh.instanceColor) fireflyGlowMesh.instanceColor.needsUpdate = true;
     }
     fireflyGlowMesh.visible = glowTarget > 0.01;
-    fireflyGlowMesh.material.opacity = glowTarget;
+    fireflyGlowMesh.material.opacity = glowTarget * 0.9;
 }
 
 // Advances the shared wind field. The grass shader samples uTime directly; the
@@ -4719,7 +4916,7 @@ function updateWeather(deltaTime, time) {
     if (weatherState === 'clear') { weatherTimer -= deltaTime; if (weatherTimer <= 0) { weatherState = 'incoming'; weatherPhase = 7; } }
     else if (weatherState === 'incoming') { weatherPhase -= deltaTime; if (weatherPhase <= 0) { weatherState = 'raining'; weatherPhase = 32 + Math.random()*26; } }
     else if (weatherState === 'raining') { weatherPhase -= deltaTime; if (weatherPhase <= 0) { weatherState = 'clearing'; weatherPhase = 13; } }
-    else if (weatherState === 'clearing') { weatherPhase -= deltaTime; if (weatherPhase <= 0) { weatherState = 'clear'; weatherTimer = 300 + Math.random()*260; } }
+    else if (weatherState === 'clearing') { weatherPhase -= deltaTime; if (weatherPhase <= 0) { weatherState = 'clear'; weatherTimer = 780 + Math.random()*640; } }
 
     const target = weatherState === 'incoming' ? 0.5 : (weatherState === 'raining' ? 1.0 : 0);
     rainIntensity += (target - rainIntensity) * Math.min(1, deltaTime*0.5);
