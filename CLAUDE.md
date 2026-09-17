@@ -93,6 +93,20 @@ declaration is discarded and the text falls back to the browser's 16px default. 
 `font-family` once on the container and use `font-weight` / `font-size` / `line-height`
 longhand on the children.
 
+### There are two ground surfaces — use `surfaceY()`, not `getElevation()`
+
+`getElevation(x, z)` is the terrain function, not the height of the thing you can
+actually stand on. The lawn plate is drawn at `elevation - 0.1` with the grass tufts
+sitting on top at `elevation`, and the surrounding field is at `elevation - OUTER_DROP`.
+A prop placed outside the fence with a bare `getElevation()` hovers — that is what left
+the garden path, the flagstones and the small scenery floating. `surfaceY(x, z)` returns
+whichever surface is under the point; use it for anything that rests on the ground.
+
+Props built inside a `Group` (the house, the shed) are placed relative to the group's
+origin, so a part several metres away along a slope needs
+`surfaceY(worldX, worldZ) - baseY` as its local offset, not a constant. The porch steps
+and foundation planting both floated for exactly this reason.
+
 ### Unlit materials ignore the day/night cycle
 
 `MeshBasicMaterial` on distant scenery looks fine at noon and then stays a bright band
@@ -128,3 +142,9 @@ inline value rather than the computed one.
   ~28 units around the player, so casting from distant props is pure cost.
 - **Adaptive resolution** (`updateAdaptiveQuality`) scales the backbuffer when the frame
   rate drops. Prefer that over thinning the yard.
+- **Colour** goes through `installToneMapping()`, which wraps ACES in a saturation lift
+  (`COLOR_SATURATION`) via `CustomToneMapping`. ACES desaturates as it rolls off
+  highlights, which greyed the whole palette. Reach for that constant to adjust overall
+  vividness — it is a colour operation and leaves every light intensity untouched. It
+  patches a three.js shader chunk, so it must run before the first material compiles,
+  and it falls back to plain ACES if the chunk it expects isn't there.

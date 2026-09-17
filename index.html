@@ -268,7 +268,9 @@ const YARD_SIZE        = 40;
 const GRASS_STEP       = 0.5;
 const GRASS_BLADE_HEIGHT = 0.46;                 // world height of an uncut tuft
 const GRASS_TUFT_RADIUS  = GRASS_STEP * 0.5;     // blades fan out to the cell edge
-const MOWED_SCALE_Y      = 0.3;                  // cut stubble — short, but still legible
+const MOWED_SCALE_Y      = 0.22;                 // cut stubble — the height drop is most of the read
+const YARD_PLATE_HALF    = (YARD_SIZE + 1.8) / 2; // half-width of the soil plate under the lawn
+const OUTER_DROP         = 0.16;                  // how far the surrounding field sits below grade
 const GRASS_GRID_SIZE  = Math.floor(YARD_SIZE / GRASS_STEP);
 const YARD_GRASS_COUNT = GRASS_GRID_SIZE * GRASS_GRID_SIZE;
 
@@ -497,6 +499,17 @@ function getElevation(x, z) {
     return val;
 }
 
+// The lawn plate and the surrounding field are drawn at different heights, and
+// the grass sits on top of the plate. Anything placed with a bare getElevation()
+// therefore floats once it is outside the yard — which is what left the garden
+// path, the gate and the small scenery hovering. Ask for the surface that is
+// actually underneath.
+function surfaceY(x, z) {
+    return Math.max(Math.abs(x), Math.abs(z)) <= YARD_PLATE_HALF
+        ? getElevation(x, z)             // lawn: the grass sits at elevation
+        : getElevation(x, z) - OUTER_DROP;
+}
+
 function getGrassHeight(x, z) {
     let uncut = false;
     if (isInfinityMode) {
@@ -590,7 +603,9 @@ function mowedTint(wx, wz) {
         const band = ((Math.floor(wz / 1.6) % 2) + 2) % 2;
         return band === 0 ? 0xC2F587 : 0x4E9A2B;
     }
-    return 0x8FD94B;
+    // Fresh-cut grass is lighter and yellower than the standing blades around
+    // it. That contrast, plus the height drop, is what makes a mown strip read.
+    return 0xC6EE72;
 }
 
 function applyUpgradeEffects() {
@@ -645,7 +660,7 @@ function init() {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     // Filmic response keeps the midday lawn from blowing out to flat neon green
     // and gives sunset and night a much wider tonal range to play with.
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    installToneMapping();
     renderer.toneMappingExposure = 1.0;
     container.appendChild(renderer.domElement);
     // Sharpens every tiling texture at grazing angles — the siding, the path, the roof.
@@ -1574,7 +1589,7 @@ function buildStaticEnvironment() {
     infGroundMesh.receiveShadow = true; infGroundMesh.visible = false; infGroundMesh.frustumCulled = false;
     scene.add(infGroundMesh);
 
-    const yardGroundGeo = new THREE.PlaneGeometry(YARD_SIZE + 1.8, YARD_SIZE + 1.8, 96, 96);
+    const yardGroundGeo = new THREE.PlaneGeometry(YARD_PLATE_HALF * 2, YARD_PLATE_HALF * 2, 96, 96);
     yardGroundGeo.rotateX(-Math.PI / 2);
     const yardPos = yardGroundGeo.attributes.position;
     for (let i = 0; i < yardPos.count; i++) yardPos.setY(i, getElevation(yardPos.getX(i), yardPos.getZ(i)) - 0.1);
@@ -1587,7 +1602,7 @@ function buildStaticEnvironment() {
     const outerGeo = new THREE.PlaneGeometry(600, 600, 96, 96);
     outerGeo.rotateX(-Math.PI / 2);
     const outerPos = outerGeo.attributes.position;
-    for (let i = 0; i < outerPos.count; i++) outerPos.setY(i, getElevation(outerPos.getX(i), outerPos.getZ(i)) - 0.16);
+    for (let i = 0; i < outerPos.count; i++) outerPos.setY(i, getElevation(outerPos.getX(i), outerPos.getZ(i)) - OUTER_DROP);
     outerGeo.computeVertexNormals();
     paintSoil(outerGeo, 0.04);
     outerMesh = new THREE.Mesh(outerGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
@@ -1733,7 +1748,7 @@ function buildStaticEnvironment() {
 function buildHouse() {
     const W = 16.5, D = 11.5, WALL = 9.0, RISE = 4.6, EAVE = 0.7;
     const houseZ = -YARD_SIZE / 2 - 13;
-    const baseY = getElevation(0, houseZ);
+    const baseY = surfaceY(0, houseZ);
     const houseGroup = new THREE.Group();
     houseGroup.position.set(0, baseY, houseZ);
     yardEnvironmentGroup.add(houseGroup);
@@ -1905,10 +1920,15 @@ function buildHouse() {
     b.add(roofMat, uvScale(box(PW + 0.8, 0.26, pSlope), 5, 1.6),
           0, PH + 1.35, frontZ + (PD + 0.9) / 2 - 0.3, Math.atan2(1.0, PD + 0.9));
     b.add(trimMat, box(PW + 0.8, 0.34, 0.18), 0, PH + 0.86, frontZ + PD + 0.6);
-    // Steps down to the lawn
+    // Steps down to the lawn. The tread surface descends on a fixed stair, but
+    // the ground falls away across the run, so each block is made tall enough to
+    // reach whatever surface is under it instead of hovering above the slope.
     for (let i = 0; i < 3; i++) {
-        b.add(stoneMat, uvScale(box(3.6, 0.26, 0.55), 2, 1),
-              0, 0.62 - i * 0.26, frontZ + PD + 0.35 + i * 0.55);
+        const lz = frontZ + PD + 0.35 + i * 0.55;
+        const top = 0.62 - i * 0.26;                          // tread height, local
+        const ground = surfaceY(0, houseZ + lz) - baseY;      // grade here, local
+        const h = Math.max(0.3, top - ground + 0.25);
+        b.add(stoneMat, uvScale(box(3.6, h, 0.55), 2, 1), 0, top - h / 2, lz);
     }
 
     b.build(houseGroup);
@@ -1925,13 +1945,13 @@ function buildHouse() {
     };
     addSconce(-2.0); addSconce(2.0);
 
-    buildFoundationPlanting(houseGroup, W, frontZ, PW, PD);
+    buildFoundationPlanting(houseGroup, W, frontZ, PW, PD, houseZ, baseY);
     buildGardenPath(houseZ + frontZ + PD + 1.6, -YARD_SIZE / 2 + 1.2);
 }
 
 // Shrubs and flowers along the foundation, plus a pair of planters on the porch.
 // Instanced, so the whole bed is two draw calls.
-function buildFoundationPlanting(houseGroup, W, frontZ, PW, PD) {
+function buildFoundationPlanting(houseGroup, W, frontZ, PW, PD, houseZ, baseY) {
     const shrubMat = new THREE.MeshStandardMaterial({
         map: makeTex('foliage', 256, drawFoliage), roughness: 1, flatShading: true,
     });
@@ -1949,7 +1969,7 @@ function buildFoundationPlanting(houseGroup, W, frontZ, PW, PD) {
     spots.forEach(([x, z], i) => {
         const h1 = deterministicHash(x * 3.1, z * 2.7), h2 = deterministicHash(x * 1.3 + 9, z * 5.1 - 4);
         const r = 0.62 + h1 * 0.4;
-        d.position.set(x, r * 0.75, z);
+        d.position.set(x, surfaceY(x, houseZ + z) - baseY + r * 0.6, z);
         d.rotation.set(h1 * 2, h2 * 6, h1 * 1.5);
         d.scale.set(r * (0.9 + h2 * 0.4), r * (0.8 + h1 * 0.5), r * (0.9 + h1 * 0.4));
         d.updateMatrix(); shrubs.setMatrixAt(i, d.matrix);
@@ -1971,7 +1991,8 @@ function buildFoundationPlanting(houseGroup, W, frontZ, PW, PD) {
         const h2 = deterministicHash(i * 1.1 - 5, i * 3.3 + 2);
         const h3 = deterministicHash(i * 4.7 + 8, i * 1.9 + 6);
         const [sx, sz] = spots[(h1 * spots.length) | 0];
-        d.position.set(sx + (h2 - 0.5) * 1.5, 0.12, sz + (h3 - 0.5) * 1.1);
+        const fx = sx + (h2 - 0.5) * 1.5, fz = sz + (h3 - 0.5) * 1.1;
+        d.position.set(fx, surfaceY(fx, houseZ + fz) - baseY - 0.04, fz);
         d.rotation.set((h2 - 0.5) * 0.3, h1 * 6.3, (h3 - 0.5) * 0.3);
         d.scale.setScalar(0.75 + h3 * 0.55);
         d.updateMatrix(); flowers.setMatrixAt(i, d.matrix);
@@ -2026,7 +2047,7 @@ function buildGardenPath(startZ, endZ) {
         const h = deterministicHash(i * 3.7 + 1, i * 1.9 - 2);
         const z = startZ + (endZ - startZ) * (i / (n - 1));
         const x = Math.sin(i * 0.45) * 0.55 + (h - 0.5) * 0.3;
-        d.position.set(x, getElevation(x, z) + 0.04, z);
+        d.position.set(x, surfaceY(x, z) + 0.03, z);
         d.rotation.set(0, h * Math.PI, 0);
         d.scale.set(1 + h * 0.25, 1, 0.85 + h * 0.3);
         d.updateMatrix(); path.setMatrixAt(i, d.matrix);
@@ -2072,7 +2093,7 @@ function buildTreeline() {
             || Math.abs(x + YARD_SIZE / 2 + 30) < 5;
         if (blocked) { mesh.setMatrixAt(slot, hidden); continue; }
         const sc = 0.85 + h1 * 1.1;
-        d.position.set(x, getElevation(x, z) - 0.4, z);
+        d.position.set(x, surfaceY(x, z) - 0.25, z);
         d.rotation.set(0, h1 * Math.PI * 2, 0);
         d.scale.set(sc * (0.85 + h2 * 0.3), sc * (0.85 + h3 * 0.45), sc * (0.85 + h1 * 0.3));
         d.updateMatrix();
@@ -2144,7 +2165,7 @@ function buildOutsideScenery() {
     place(bushGeo, foliageMat, scatter(1500, 3, OUTER, 4.2),
           (d, tint, x, z, h1, h2, h3) => {
               const r = 0.8 + h3 * 1.5;
-              d.position.set(x, getElevation(x, z) + r * 0.45, z);
+              d.position.set(x, surfaceY(x, z) + r * 0.45, z);
               d.rotation.set((h1 - 0.5) * 0.5, h2 * 6.3, (h3 - 0.5) * 0.5);
               d.scale.set(r * (1 + h1 * 0.5), r * (0.65 + h2 * 0.4), r * (1 + h2 * 0.5));
               tint.setHSL(0.26 + h2 * 0.08, 0.45 + h1 * 0.3, 0.6 + h3 * 0.4);
@@ -2157,7 +2178,7 @@ function buildOutsideScenery() {
           (d, tint, x, z, h1, h2, h3) => {
               // Small and flat: scrub, not boulders.
               const r = 0.55 + h2 * 0.85;
-              d.position.set(x, getElevation(x, z) + r * 0.1, z);
+              d.position.set(x, surfaceY(x, z) + r * 0.1, z);
               d.rotation.set((h3 - 0.5) * 0.2, h1 * 6.3, (h2 - 0.5) * 0.2);
               d.scale.set(r * 1.5, r * 0.32, r * 1.5);
               tint.setHSL(0.25 + h1 * 0.07, 0.4 + h3 * 0.25, 0.5 + h2 * 0.32);
@@ -2166,7 +2187,7 @@ function buildOutsideScenery() {
     // --- ferns: a low cluster of fronds ---
     place(makeFernGeometry(), foliageMat, scatter(1100, 11, OUTER * 0.7, 1.6),
           (d, tint, x, z, h1, h2, h3) => {
-              d.position.set(x, getElevation(x, z), z);
+              d.position.set(x, surfaceY(x, z) - 0.04, z);
               d.rotation.set(0, h1 * 6.3, 0);
               d.scale.set(0.9 + h3 * 0.9, 0.7 + h2 * 0.6, 0.9 + h3 * 0.9);
               tint.setHSL(0.25 + h2 * 0.06, 0.45, 0.72 + h1 * 0.26);
@@ -2176,7 +2197,7 @@ function buildOutsideScenery() {
     place(uvScale(new THREE.CylinderGeometry(0.34, 0.42, 4.4, 7), 1.6, 3), barkMat,
           scatter(60, 23, OUTER * 0.8, 4.0),
           (d, tint, x, z, h1, h2, h3) => {
-              d.position.set(x, getElevation(x, z) + 0.3, z);
+              d.position.set(x, surfaceY(x, z) + 0.28, z);
               d.rotation.set(Math.PI / 2 + (h3 - 0.5) * 0.14, h1 * 6.3, 0);
               d.scale.set(0.8 + h2 * 0.6, 0.7 + h3 * 0.7, 0.8 + h2 * 0.6);
               tint.setHSL(0.09, 0.3, 0.5 + h2 * 0.3);
@@ -2187,7 +2208,7 @@ function buildOutsideScenery() {
           scatter(200, 37, OUTER * 0.85, 2.6),
           (d, tint, x, z, h1, h2, h3) => {
               const r = 0.35 + h3 * 1.2;
-              d.position.set(x, getElevation(x, z) + r * 0.25, z);
+              d.position.set(x, surfaceY(x, z) + r * 0.25, z);
               d.rotation.set(h1 * 3, h2 * 6.3, h3 * 3);
               d.scale.set(r * (1 + h1 * 0.4), r * (0.6 + h2 * 0.5), r * (1 + h2 * 0.4));
               tint.setHSL(0.08 + h2 * 0.05, 0.06 + h1 * 0.06, 0.38 + h3 * 0.24);
@@ -2197,7 +2218,7 @@ function buildOutsideScenery() {
     const flowerMat = new THREE.MeshStandardMaterial({ roughness: 0.65, side: THREE.DoubleSide, vertexColors: true });
     place(makeFlowerGeometry(), flowerMat, scatter(520, 53, OUTER * 0.55, 1.2),
           (d, tint, x, z, h1, h2, h3) => {
-              d.position.set(x, getElevation(x, z), z);
+              d.position.set(x, surfaceY(x, z) - 0.04, z);
               d.rotation.set((h2 - 0.5) * 0.25, h1 * 6.3, (h3 - 0.5) * 0.25);
               d.scale.setScalar(0.9 + h3 * 0.7);
               tint.setHSL((h3 < 0.4 ? 0.13 + h1 * 0.05 : (h3 < 0.75 ? 0.74 + h1 * 0.1 : 0.02 + h1 * 0.04)) % 1,
@@ -2270,7 +2291,7 @@ function buildNeighbourhood() {
     const tint = new THREE.Color();
     for (const [hx, hz, rot, scale, hue] of plots) {
         const W = 13 * scale, D = 10 * scale, WALL = 7 * scale, RISE = 3.6 * scale;
-        const y = getElevation(hx, hz);
+        const y = surfaceY(hx, hz);
         const run = D / 2 + 0.5, slope = Math.hypot(run, RISE), pitch = Math.atan2(RISE, run);
         const cs = Math.cos(rot), sn = Math.sin(rot);
         // Place parts in world space: rotate the local offset, then translate.
@@ -2353,7 +2374,7 @@ function buildShed() {
 
     const sx = -YARD_SIZE / 2 - 6.5, sz = YARD_SIZE / 2 + 5.5;
     const g = new THREE.Group();
-    g.position.set(sx, getElevation(sx, sz), sz);
+    g.position.set(sx, surfaceY(sx, sz), sz);
     g.rotation.y = -0.5;
     yardEnvironmentGroup.add(g);
 
@@ -2398,7 +2419,7 @@ function buildUtilityPoles() {
     const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
     for (let i = -3; i <= 3; i++) {
         const x = -YARD_SIZE / 2 - 30, z = i * SPACING;
-        const y = getElevation(x, z);
+        const y = surfaceY(x, z);
         b.add(woodMat, uvScale(new THREE.CylinderGeometry(0.2, 0.28, POLE_H, 7), 1, 3), x, y + POLE_H / 2 - 0.5, z);
         b.add(woodMat, uvScale(box(2.6, 0.18, 0.18), 2, 1), x, y + POLE_H - 1.1, z);
         b.add(woodMat, uvScale(box(2.0, 0.16, 0.16), 2, 1), x, y + POLE_H - 2.0, z);
@@ -2661,7 +2682,9 @@ function buildGate(fenceZ, gateHalf, fenceTopY, drop, paintMat) {
     leaf.rotation.y = -0.45;
     g.add(leaf);
     const lb = partBuilder();
-    const W = gateHalf * 2 - 0.1, H = 1.1;
+    // Like the fence pickets, the leaf hangs from the level top and runs far
+    // enough down to stay in the ground wherever the grade falls away.
+    const W = gateHalf * 2 - 0.1, H = 1.1 + drop;
     for (let i = 0; i < 6; i++) {
         lb.add(paintMat, box(0.11, H, 0.045), 0.18 + i * (W - 0.3) / 5, -0.22 - H / 2, 0);
     }
@@ -3342,7 +3365,7 @@ function populateYard(reseed) {
         paintSoil(yardGroundMesh.geometry);
         yardGroundMesh.geometry.attributes.color.needsUpdate = true;
         const outerP = outerMesh.geometry.attributes.position;
-        for (let i = 0; i < outerP.count; i++) outerP.setY(i, getElevation(outerP.getX(i), outerP.getZ(i)) - 0.16);
+        for (let i = 0; i < outerP.count; i++) outerP.setY(i, getElevation(outerP.getX(i), outerP.getZ(i)) - OUTER_DROP);
         outerMesh.geometry.computeVertexNormals(); outerP.needsUpdate = true;
         paintSoil(outerMesh.geometry, 0.04);
         outerMesh.geometry.attributes.color.needsUpdate = true;
@@ -4035,6 +4058,28 @@ function addCoins(amount) {
     const el = document.getElementById('coin-text');
     el.style.transform = 'scale(1.3)'; setTimeout(() => { el.style.transform = 'scale(1)'; }, 150);
     playCoinBlip();
+}
+
+// ACES rolls highlights off beautifully, but it desaturates as it does it, which
+// left every colour in the game reading as a slightly grey version of itself.
+// Wrapping it in a saturation lift fixes the palette without touching a single
+// light — the scene is lit exactly as before, it just keeps its chroma.
+const COLOR_SATURATION = 1.24;
+function installToneMapping() {
+    const chunk = THREE.ShaderChunk.tonemapping_pars_fragment;
+    const stub = 'vec3 CustomToneMapping( vec3 color ) { return color; }';
+    if (!chunk || !chunk.includes(stub)) {
+        // three changed its shader chunk out from under us — take plain ACES.
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        return;
+    }
+    THREE.ShaderChunk.tonemapping_pars_fragment = chunk.replace(stub, `
+        vec3 CustomToneMapping( vec3 color ) {
+            color = ACESFilmicToneMapping( color );
+            float luma = dot( color, vec3( 0.2126, 0.7152, 0.0722 ) );
+            return clamp( mix( vec3( luma ), color, ${COLOR_SATURATION.toFixed(2)} ), 0.0, 1.0 );
+        }`);
+    renderer.toneMapping = THREE.CustomToneMapping;
 }
 
 // ---------------------------------------------------------------------------
